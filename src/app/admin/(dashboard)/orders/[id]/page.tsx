@@ -8,14 +8,15 @@ import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { buttonStyles } from "@/components/ui/button";
 import { getOrderDetail } from "@/lib/data/orders";
 import { getBusinessSettings } from "@/lib/data/settings";
-import { formatDateTime, formatGhs, formatOrderStatus } from "@/lib/format";
-import { phoneHref, whatsappHref } from "@/lib/site-config";
+import { formatDateTime, formatGhs, formatOrderStatus, formatPaymentMethod, formatPaymentStatus } from "@/lib/format";
+import { phoneHref, smsHref } from "@/lib/site-config";
 import type { Json, OrderStatus } from "@/types/database";
 
 import {
   resetDeliveryFeeAction,
   updateDeliveryFeeAction,
   updateOrderStatusAction,
+  updatePaymentStatusAction,
 } from "../actions";
 
 export const metadata: Metadata = {
@@ -41,7 +42,7 @@ export default async function AdminOrderDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ updated?: string; fee?: string }>;
+  searchParams: Promise<{ updated?: string; fee?: string; payment?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const [detail, settings] = await Promise.all([getOrderDetail(id), getBusinessSettings()]);
@@ -49,7 +50,7 @@ export default async function AdminOrderDetailPage({
   if (!detail) notFound();
 
   const { order, items } = detail;
-  const notifyWhatsapp = settings?.notify_whatsapp ?? false;
+  const notifySms = settings?.notify_whatsapp ?? false;
   const isDelivery = order.fulfilment_method === "delivery";
   const feePending = isDelivery && order.delivery_fee_status === "pending";
   const customerMessage = buildCustomerMessage(order);
@@ -73,13 +74,24 @@ export default async function AdminOrderDetailPage({
       </div>
 
       {query.updated ? (
-        <p className={query.updated === "error" ? "rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800" : "rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"}>
-          {query.updated === "error" ? "The order status could not be updated." : `Order marked as ${formatOrderStatus(query.updated)}.`}
+        <p className={query.updated === "error" || query.updated === "invalid" || query.updated === "needs_fee" ? "rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800" : "rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"}>
+          {query.updated === "error"
+            ? "The order status could not be updated."
+            : query.updated === "invalid"
+              ? "That status change is not allowed."
+              : query.updated === "needs_fee"
+                ? "Confirm the delivery fee before marking this delivery order as completed."
+                : `Order marked as ${formatOrderStatus(query.updated)}.`}
         </p>
       ) : null}
       {query.fee ? (
         <p className={query.fee === "saved" || query.fee === "reset" ? "rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800" : "rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800"}>
           {query.fee === "saved" ? "Delivery fee saved." : query.fee === "reset" ? "Delivery fee reset to pending." : "Could not update delivery fee."}
+        </p>
+      ) : null}
+      {query.payment ? (
+        <p className={query.payment === "saved" ? "rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800" : "rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800"}>
+          {query.payment === "saved" ? "Payment status updated." : "Could not update payment status."}
         </p>
       ) : null}
 
@@ -105,9 +117,9 @@ export default async function AdminOrderDetailPage({
               <a href={phoneHref(order.customer_phone)} className={buttonStyles({ variant: "outline", size: "sm" })}>
                 <Phone className="size-4" /> Call
               </a>
-              {notifyWhatsapp ? (
-                <a href={`${whatsappHref(order.customer_phone)}?text=${encodeURIComponent(customerMessage)}`} target="_blank" rel="noreferrer" className={buttonStyles({ variant: "accent", size: "sm" })}>
-                  <MessageCircle className="size-4" /> WhatsApp
+              {notifySms ? (
+                <a href={smsHref(order.customer_phone, customerMessage)} className={buttonStyles({ variant: "accent", size: "sm" })}>
+                  <MessageCircle className="size-4" /> SMS
                 </a>
               ) : null}
             </div>
@@ -162,6 +174,14 @@ export default async function AdminOrderDetailPage({
             <h2 className="font-display text-xl font-bold text-brand-green-deep">Payment Information</h2>
             <dl className="mt-4 space-y-3 text-sm">
               <div className="flex items-center justify-between gap-4">
+                <dt className="text-muted">Payment method</dt>
+                <dd className="font-semibold text-foreground">{formatPaymentMethod(order.payment_method ?? (order.fulfilment_method === "pickup" ? "cash_on_pickup" : "cash_on_delivery"))}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-muted">Payment status</dt>
+                <dd className="font-semibold text-foreground">{formatPaymentStatus(order.payment_status ?? "pending")}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4">
                 <dt className="text-muted">Subtotal</dt>
                 <dd className="font-semibold text-foreground">{formatGhs(order.subtotal_pesewas)}</dd>
               </div>
@@ -176,6 +196,25 @@ export default async function AdminOrderDetailPage({
                 <dd className="font-display text-xl font-extrabold text-brand-green-deep">{formatGhs(order.total_pesewas)}</dd>
               </div>
             </dl>
+            <form action={updatePaymentStatusAction} className="mt-5 border-t border-border/70 pt-4">
+              <input type="hidden" name="orderId" value={order.id} />
+              <label className="block">
+                <span className="text-sm font-medium text-brand-green-deep">Update payment status</span>
+                <select
+                  name="paymentStatus"
+                  defaultValue={order.payment_status ?? "pending"}
+                  className="mt-2 h-11 w-full rounded-xl border border-border bg-white px-3 text-sm font-medium text-foreground focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/10"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="paid">Paid</option>
+                  <option value="failed">Failed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </label>
+              <button type="submit" className={buttonStyles({ variant: "outline", size: "sm", className: "mt-3 w-full" })}>
+                Save payment status
+              </button>
+            </form>
           </section>
 
           {isDelivery ? (

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CheckCircle2, Clock3, ShoppingBag, TrendingUp, ArrowRight } from "lucide-react";
+import { CheckCircle2, Clock3, ShoppingBag, TrendingUp, ArrowRight, Store, Banknote } from "lucide-react";
 
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { buttonStyles } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { getDashboardSummary } from "@/lib/data/dashboard";
 import { formatDateTime, formatGhs, formatOrderStatus } from "@/lib/format";
 import type { OrderStatus } from "@/types/database";
+import { toggleStoreAvailabilityAction } from "@/app/admin/(dashboard)/settings/actions";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -28,13 +29,18 @@ function statusVariant(status: OrderStatus): BadgeVariant {
 }
 
 const statCards = [
-  { key: "total", label: "Total Orders", icon: ShoppingBag },
+  { key: "today", label: "Orders Today", icon: ShoppingBag },
   { key: "new", label: "New Orders", icon: Clock3 },
   { key: "preparing", label: "Preparing", icon: TrendingUp },
   { key: "completed", label: "Completed", icon: CheckCircle2 },
 ] as const;
 
-export default async function AdminOverviewPage() {
+export default async function AdminOverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ store?: string }>;
+}) {
+  const params = await searchParams;
   const summary = await getDashboardSummary();
 
   return (
@@ -67,14 +73,70 @@ export default async function AdminOverviewPage() {
         />
       ) : null}
 
+      {params.store === "open" || params.store === "closed" ? (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+          Store ordering is now {params.store === "open" ? "open" : "closed"}.
+        </p>
+      ) : params.store === "error" ? (
+        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+          Could not update store availability.
+        </p>
+      ) : null}
+
       {summary.status === "ready" ? (
         <>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-muted">Store Availability</p>
+                  <p className="mt-2 font-display text-2xl font-extrabold tracking-[-0.03em] text-brand-green-deep">
+                    {summary.store?.is_open ? "Open" : "Closed"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">{summary.store?.opening_note || "Controls whether customers can place orders."}</p>
+                </div>
+                <span className="inline-flex size-11 items-center justify-center rounded-xl bg-brand-cream text-brand-green-deep"><Store className="size-5" strokeWidth={1.8} /></span>
+              </div>
+              <form action={toggleStoreAvailabilityAction} className="mt-4 flex flex-wrap items-center gap-2">
+                <input type="hidden" name="isOpen" value={summary.store?.is_open ? "false" : "true"} />
+                <button type="submit" className={buttonStyles({ variant: summary.store?.is_open ? "outline" : "accent", size: "sm" })}>
+                  {summary.store?.is_open ? "Switch OFF (close orders)" : "Switch ON (open orders)"}
+                </button>
+                <Link href="/admin/settings" className="text-sm font-semibold text-brand-green-deep underline decoration-brand-lime decoration-2 underline-offset-4">Settings</Link>
+              </form>
+            </div>
+            <div className="rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-muted">Today&apos;s Confirmed Sales</p>
+                  <p className="mt-2 font-display text-2xl font-extrabold tracking-[-0.03em] text-brand-green-deep">
+                    {formatGhs(summary.stats.todayConfirmedSalesPesewas)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">Completed orders with confirmed payments today only.</p>
+                </div>
+                <span className="inline-flex size-11 items-center justify-center rounded-xl bg-brand-cream text-brand-green-deep"><Banknote className="size-5" strokeWidth={1.8} /></span>
+              </div>
+            </div>
+            <div className="rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-muted">Pending Delivery Fees</p>
+                  <p className="mt-2 font-display text-2xl font-extrabold tracking-[-0.03em] text-brand-green-deep">
+                    {summary.stats.pendingDeliveryFees}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">Delivery orders waiting for fee confirmation.</p>
+                </div>
+                <span className="inline-flex size-11 items-center justify-center rounded-xl bg-brand-cream text-brand-green-deep"><Clock3 className="size-5" strokeWidth={1.8} /></span>
+              </div>
+            </div>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {statCards.map((card) => {
               const Icon = card.icon;
               const value =
-                card.key === "total"
-                  ? summary.stats.total
+                card.key === "today"
+                  ? summary.stats.todayOrders
                   : card.key === "new"
                     ? summary.stats.newOrders
                     : card.key === "preparing"

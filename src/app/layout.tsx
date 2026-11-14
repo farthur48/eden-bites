@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Manrope, Plus_Jakarta_Sans } from "next/font/google";
 
 import "./globals.css";
+import { getSiteUrl } from "@/lib/site-url";
 
 const sans = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -15,29 +16,18 @@ const display = Manrope({
   display: "swap",
 });
 
-function getSiteUrl(): URL {
-  const value = process.env.NEXT_PUBLIC_SITE_URL;
-
-  if (value) {
-    try {
-      return new URL(value);
-    } catch {
-      return new URL("http://localhost:3000");
-    }
-  }
-
-  return new URL("http://localhost:3000");
-}
-
 export const metadata: Metadata = {
   metadataBase: getSiteUrl(),
   title: {
-    default: "Eden Bites — Good Food. Great Moments. Every Bite.",
+    default: "Eden Bites - Good Food. Great Moments. Every Bite.",
     template: "%s | Eden Bites",
   },
   description:
     "Freshly made Ghanaian meals for delivery or pickup. Order online and pay on arrival.",
   applicationName: "Eden Bites",
+  alternates: {
+    canonical: "/",
+  },
   keywords: [
     "Eden Bites",
     "Ghanaian food",
@@ -51,15 +41,25 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "Eden Bites",
-    title: "Eden Bites — Good Food. Great Moments. Every Bite.",
+    title: "Eden Bites - Good Food. Great Moments. Every Bite.",
     description:
       "Freshly made Ghanaian meals for delivery or pickup. Order online and pay on arrival.",
+    url: "/",
+    images: [
+      {
+        url: "/menu/banku-tilapia.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Freshly prepared meal from Eden Bites",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Eden Bites — Good Food. Great Moments. Every Bite.",
+    title: "Eden Bites - Good Food. Great Moments. Every Bite.",
     description:
       "Freshly made Ghanaian meals for delivery or pickup. Order online and pay on arrival.",
+    images: ["/menu/banku-tilapia.jpg"],
   },
   robots: {
     index: true,
@@ -80,7 +80,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${sans.variable} ${display.variable}`}>
+    <html lang="en" data-scroll-behavior="smooth" className={`${sans.variable} ${display.variable}`}>
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
         {children}
       </body>

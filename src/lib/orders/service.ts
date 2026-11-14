@@ -14,24 +14,31 @@ import type {
   FulfilmentMethod,
   OrderConfirmation,
   OrderLineOption,
+  PaymentMethod,
+  PaymentStatus,
   PricedOrderItem,
 } from "@/lib/orders/types";
+import { getStoreAvailability } from "@/lib/store/availability";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dispatchPendingNotifications, enqueueOrderNotifications } from "@/lib/notifications/service";
 import type { Json, OrderItem } from "@/types/database";
 
 const MAX_ITEMS = 25;
 const MAX_QUANTITY = 20;
 const PREVIEW_COOKIE = "eden_bites_order";
+const DUPLICATE_WINDOW_MS = 90_000;
 
 export type CreateOrderInput = {
   customerName: string;
   phone: string;
   email: string | null;
   fulfilmentMethod: FulfilmentMethod;
+  paymentMethod: PaymentMethod;
   address: string | null;
   area: string | null;
   directions: string | null;
   notes: string | null;
+  idempotencyKey?: string | null;
   items: CheckoutRequestItem[];
 };
 
@@ -52,9 +59,26 @@ export async function createOrder(
     return { ok: false, message: priced.message, field: "cart" };
   }
 
+  if (!isPaymentMethodValid(input.fulfilmentMethod, input.paymentMethod)) {
+    return {
+      ok: false,
+      message: "Choose a valid payment arrangement for this order.",
+    };
+  }
+
+  const store = await getStoreAvailability();
+  if (!store.isOpen) {
+    return {
+      ok: false,
+      message: store.message || "We are not taking orders at the moment.",
+      field: "cart",
+    };
+  }
+
   const deliveryFeeStatus: DeliveryFeeStatus =
     input.fulfilmentMethod === "delivery" ? "pending" : "not_required";
   const reference = createReference();
+  const idempotencyKey = normalizeIdempotencyKey(input.idempotencyKey);
 
   if (!isLiveOrderingEnabled()) {
     const confirmation: OrderConfirmation = {
@@ -63,6 +87,8 @@ export async function createOrder(
       phone: input.phone,
       email: input.email,
       fulfilmentMethod: input.fulfilmentMethod,
+      paymentMethod: input.paymentMethod,
+      paymentStatus: "pending",
       address: input.address,
       area: input.area,
       directions: input.directions,
@@ -83,7 +109,12 @@ export async function createOrder(
   }
 
   try {
-    return await persistOrder(input, priced, deliveryFeeStatus, reference);
+    const duplicate = await findRecentDuplicateOrder(input, priced.subtotal);
+    if (duplicate) {
+      return { ok: true, confirmation: duplicate };
+    }
+
+    return await persistOrder(input, priced, deliveryFeeStatus, reference, idempotencyKey);
   } catch {
     return {
       ok: false,
@@ -98,99 +129,149 @@ async function persistOrder(
   priced: { items: PricedOrderItem[]; subtotal: number },
   deliveryFeeStatus: DeliveryFeeStatus,
   initialReference: string,
+  idempotencyKey: string | null,
 ): Promise<CreateOrderResult> {
   const supabase = createAdminClient();
   let reference = initialReference;
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const { data: order, error } = await supabase
-      .from("orders")
-      .insert({
-        reference,
-        customer_name: input.customerName,
-        customer_phone: input.phone,
-        customer_email: input.email,
-        fulfilment_method: input.fulfilmentMethod,
-        delivery_address: input.address,
-        delivery_area: input.area,
-        delivery_directions: input.directions,
-        notes: input.notes,
-        status: "new",
-        subtotal_pesewas: priced.subtotal,
-        delivery_fee_pesewas: 0,
-        delivery_fee_status: deliveryFeeStatus,
-        total_pesewas: priced.subtotal,
-      })
-      .select("*")
-      .single();
+    const payload = {
+      reference,
+      customer_name: input.customerName,
+      customer_phone: input.phone,
+      customer_email: input.email,
+      fulfilment_method: input.fulfilmentMethod,
+      delivery_address: input.address,
+      delivery_area: input.area,
+      delivery_directions: input.directions,
+      notes: input.notes,
+      status: "new" as const,
+      payment_method: input.paymentMethod,
+      payment_status: "pending" as const,
+      subtotal_pesewas: priced.subtotal,
+      delivery_fee_pesewas: 0,
+      delivery_fee_status: deliveryFeeStatus,
+      total_pesewas: priced.subtotal,
+      idempotency_key: idempotencyKey,
+      items: priced.items.map((item) => ({
+        product_id: item.productId,
+        product_name: item.productName,
+        unit_price_pesewas: item.unitPricePesewas,
+        quantity: item.quantity,
+        line_total_pesewas: item.lineTotalPesewas,
+        options: item.options,
+        special_instructions: item.specialInstructions,
+      })),
+    };
+
+    const { data, error } = await supabase.rpc("create_order_atomic", { payload });
+
+    if (!error && data) {
+      const rpc = data as { ok?: boolean; duplicate?: boolean; order?: Record<string, unknown> };
+      if (rpc.ok && rpc.order) {
+        const confirmation = await getOrderConfirmation(String(rpc.order.reference));
+        if (confirmation) {
+          await triggerOrderNotifications(String(rpc.order.id ?? ""), confirmation, rpc.duplicate === true);
+          return { ok: true, confirmation };
+        }
+      }
+    }
 
     if (error) {
+      const message = String(error.message || "");
+      if (message.includes("STORE_CLOSED")) {
+        return {
+          ok: false,
+          message: "We are not taking orders at the moment. Please check back soon.",
+          field: "cart",
+        };
+      }
+      if (error.code === "23505" && idempotencyKey) {
+        const existing = await getOrderConfirmationByIdempotencyKey(idempotencyKey);
+        if (existing) return { ok: true, confirmation: existing };
+      }
       if (error.code === "23505" && attempt < 3) {
         reference = createReference();
         continue;
       }
-
+      if (error.code === "42883" || message.includes("create_order_atomic")) {
+        return await persistOrderLegacy(input, priced, deliveryFeeStatus, reference);
+      }
       return {
         ok: false,
         message:
           "We could not save your order right now. Please try again, or contact the kitchen on WhatsApp.",
       };
     }
-
-    const itemRows = priced.items.map((item) => ({
-      order_id: order.id,
-      product_id: item.productId,
-      product_name: item.productName,
-      unit_price_pesewas: item.unitPricePesewas,
-      quantity: item.quantity,
-      line_total_pesewas: item.lineTotalPesewas,
-      options: item.options as unknown as Json,
-    }));
-
-    const { error: itemsError } = await supabase
-      .from("order_items")
-      .insert(itemRows);
-
-    if (itemsError) {
-      await supabase.from("orders").delete().eq("id", order.id);
-      return {
-        ok: false,
-        message:
-          "We could not save your order items. Please try again or contact the kitchen.",
-      };
-    }
-
-    return {
-      ok: true,
-      confirmation: {
-        reference: order.reference,
-        customerName: order.customer_name,
-        phone: order.customer_phone,
-        email: order.customer_email,
-        fulfilmentMethod: order.fulfilment_method,
-        address: order.delivery_address,
-        area: order.delivery_area,
-        directions: order.delivery_directions,
-        notes: order.notes,
-        items: priced.items,
-        subtotalPesewas: order.subtotal_pesewas,
-        deliveryFeePesewas:
-          order.delivery_fee_status === "confirmed"
-            ? order.delivery_fee_pesewas
-            : null,
-        deliveryFeeStatus: order.delivery_fee_status,
-        totalPesewas: order.total_pesewas,
-        status: order.status,
-        createdAt: order.created_at,
-        mode: "live",
-      },
-    };
   }
 
   return {
     ok: false,
     message: "We could not generate an order reference. Please try again.",
   };
+}
+
+async function persistOrderLegacy(
+  input: CreateOrderInput,
+  priced: { items: PricedOrderItem[]; subtotal: number },
+  deliveryFeeStatus: DeliveryFeeStatus,
+  reference: string,
+): Promise<CreateOrderResult> {
+  const supabase = createAdminClient();
+  const { data: order, error } = await supabase
+    .from("orders")
+    .insert({
+      reference,
+      customer_name: input.customerName,
+      customer_phone: input.phone,
+      customer_email: input.email,
+      fulfilment_method: input.fulfilmentMethod,
+      delivery_address: input.address,
+      delivery_area: input.area,
+      delivery_directions: input.directions,
+      notes: input.notes,
+      status: "new",
+      subtotal_pesewas: priced.subtotal,
+      delivery_fee_pesewas: 0,
+      delivery_fee_status: deliveryFeeStatus,
+      total_pesewas: priced.subtotal,
+    } as never)
+    .select("*")
+    .single();
+
+  if (error || !order) {
+    return {
+      ok: false,
+      message:
+        "We could not save your order right now. Please try again, or contact the kitchen on WhatsApp.",
+    };
+  }
+
+  const itemRows = priced.items.map((item) => ({
+    order_id: order.id,
+    product_id: item.productId,
+    product_name: item.productName,
+    unit_price_pesewas: item.unitPricePesewas,
+    quantity: item.quantity,
+    line_total_pesewas: item.lineTotalPesewas,
+    options: item.options as unknown as Json,
+  }));
+
+  const { error: itemsError } = await supabase.from("order_items").insert(itemRows);
+  if (itemsError) {
+    await supabase.from("orders").delete().eq("id", order.id);
+    return {
+      ok: false,
+      message: "We could not save your order items. Please try again or contact the kitchen.",
+    };
+  }
+
+  const confirmation = await getOrderConfirmation(order.reference);
+  if (!confirmation) {
+    return { ok: false, message: "We could not confirm your order. Please contact the kitchen." };
+  }
+  await triggerOrderNotifications(order.id, confirmation, false);
+  return { ok: true, confirmation };
 }
 
 export async function getOrderConfirmation(
@@ -218,31 +299,118 @@ export async function getOrderConfirmation(
       .eq("order_id", order.id)
       .order("created_at", { ascending: true });
 
-    return {
-      reference: order.reference,
-      customerName: order.customer_name,
-      phone: order.customer_phone,
-      email: order.customer_email,
-      fulfilmentMethod: order.fulfilment_method,
-      address: order.delivery_address,
-      area: order.delivery_area,
-      directions: order.delivery_directions,
-      notes: order.notes,
-      items: (items ?? []).map(mapStoredOrderItem),
-      subtotalPesewas: order.subtotal_pesewas,
-      deliveryFeePesewas:
-        order.delivery_fee_status === "confirmed"
-          ? order.delivery_fee_pesewas
-          : null,
-      deliveryFeeStatus: order.delivery_fee_status,
-      totalPesewas: order.total_pesewas,
-      status: order.status,
-      createdAt: order.created_at,
-      mode: "live",
-    };
+    return toConfirmation(order as Record<string, unknown>, (items ?? []) as OrderItem[], "live");
   } catch {
     return getPreviewConfirmation(reference);
   }
+}
+
+async function getOrderConfirmationByIdempotencyKey(
+  idempotencyKey: string,
+): Promise<OrderConfirmation | null> {
+  try {
+    const supabase = createAdminClient();
+    const { data: order } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    if (!order) return null;
+    const { data: items } = await supabase
+      .from("order_items")
+      .select("*")
+      .eq("order_id", order.id)
+      .order("created_at", { ascending: true });
+    const confirmation = toConfirmation(order as Record<string, unknown>, (items ?? []) as OrderItem[], "live");
+    await triggerOrderNotifications(order.id, confirmation, true);
+    return confirmation;
+  } catch {
+    return null;
+  }
+}
+
+async function findRecentDuplicateOrder(
+  input: CreateOrderInput,
+  subtotalPesewas: number,
+): Promise<OrderConfirmation | null> {
+  if (!isLiveOrderingEnabled()) return null;
+  try {
+    const supabase = createAdminClient();
+    const since = new Date(Date.now() - DUPLICATE_WINDOW_MS).toISOString();
+    const { data: order } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("customer_phone", input.phone)
+      .eq("fulfilment_method", input.fulfilmentMethod)
+      .eq("subtotal_pesewas", subtotalPesewas)
+      .eq("status", "new")
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!order) return null;
+    const { data: items } = await supabase
+      .from("order_items")
+      .select("*")
+      .eq("order_id", order.id)
+      .order("created_at", { ascending: true });
+    const confirmation = toConfirmation(order as Record<string, unknown>, (items ?? []) as OrderItem[], "live");
+    await triggerOrderNotifications(order.id, confirmation, true);
+    return confirmation;
+  } catch {
+    return null;
+  }
+}
+
+async function triggerOrderNotifications(
+  orderId: string,
+  confirmation: OrderConfirmation,
+  isDuplicate: boolean,
+): Promise<void> {
+  if (!isLiveOrderingEnabled() || confirmation.mode !== "live" || !orderId) return;
+  try {
+    await enqueueOrderNotifications({ orderId, confirmation });
+    // Attempt delivery once on create path (or for duplicate lookups to catch pending retries)
+    // without blocking the order result; failures remain tracked for retry endpoint/cron.
+    void dispatchPendingNotifications({ orderId, limit: 5 }).catch((error) => {
+      console.error("[notifications] dispatch_after_order_failed", { orderId, isDuplicate, error: String(error) });
+    });
+  } catch (error) {
+    console.error("[notifications] trigger_failed", { orderId, isDuplicate, error: String(error) });
+  }
+}
+
+function toConfirmation(
+  order: Record<string, unknown>,
+  items: OrderItem[],
+  mode: "live" | "preview",
+): OrderConfirmation {
+  const fulfilmentMethod = (order.fulfilment_method as FulfilmentMethod) ?? "delivery";
+  const deliveryFeeStatus = (order.delivery_fee_status as DeliveryFeeStatus) ??
+    (fulfilmentMethod === "pickup" ? "not_required" : "pending");
+  return {
+    reference: String(order.reference ?? ""),
+    customerName: String(order.customer_name ?? ""),
+    phone: String(order.customer_phone ?? ""),
+    email: (order.customer_email as string | null) ?? null,
+    fulfilmentMethod,
+    paymentMethod: ((order.payment_method as PaymentMethod) ??
+      (fulfilmentMethod === "pickup" ? "cash_on_pickup" : "cash_on_delivery")),
+    paymentStatus: ((order.payment_status as PaymentStatus) ?? "pending"),
+    address: (order.delivery_address as string | null) ?? null,
+    area: (order.delivery_area as string | null) ?? null,
+    directions: (order.delivery_directions as string | null) ?? null,
+    notes: (order.notes as string | null) ?? null,
+    items: items.map(mapStoredOrderItem),
+    subtotalPesewas: Number(order.subtotal_pesewas ?? 0),
+    deliveryFeePesewas:
+      deliveryFeeStatus === "confirmed" ? Number(order.delivery_fee_pesewas ?? 0) : null,
+    deliveryFeeStatus,
+    totalPesewas: Number(order.total_pesewas ?? 0),
+    status: (order.status as OrderConfirmation["status"]) ?? "new",
+    createdAt: String(order.created_at ?? new Date().toISOString()),
+    mode,
+  };
 }
 
 export async function priceOrderItems(
@@ -437,13 +605,19 @@ async function getPreviewConfirmation(
       return null;
     }
 
-    const parsed = JSON.parse(raw) as OrderConfirmation;
+    const parsed = JSON.parse(raw) as Partial<OrderConfirmation>;
 
     if (parsed.reference !== reference) {
       return null;
     }
 
-    return parsed;
+    return {
+      ...parsed,
+      paymentMethod:
+        (parsed.paymentMethod as PaymentMethod | undefined) ??
+        (parsed.fulfilmentMethod === "pickup" ? "cash_on_pickup" : "cash_on_delivery"),
+      paymentStatus: (parsed.paymentStatus as PaymentStatus | undefined) ?? "pending",
+    } as OrderConfirmation;
   } catch {
     return null;
   }
@@ -458,7 +632,22 @@ function createReference(): string {
   })
     .format(new Date())
     .replace(/-/g, "");
-  const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
+  const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase();
 
   return `EB-${date}-${suffix}`;
+}
+
+function normalizeIdempotencyKey(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  return /^[a-zA-Z0-9._:-]{8,120}$/.test(trimmed) ? trimmed : null;
+}
+
+function isPaymentMethodValid(
+  fulfilment: FulfilmentMethod,
+  payment: PaymentMethod,
+): boolean {
+  return fulfilment === "delivery"
+    ? payment === "cash_on_delivery" || payment === "momo_on_delivery"
+    : payment === "cash_on_pickup" || payment === "momo_on_pickup";
 }

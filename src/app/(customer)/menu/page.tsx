@@ -12,6 +12,13 @@ export const metadata: Metadata = {
   title: "Menu",
   description:
     "Explore the Eden Bites menu and choose a freshly prepared meal for delivery or pickup.",
+  alternates: { canonical: "/menu" },
+  openGraph: {
+    title: "Menu | Eden Bites",
+    description:
+      "Explore the Eden Bites menu and choose a freshly prepared meal for delivery or pickup.",
+    url: "/menu",
+  },
 };
 
 export const dynamic = "force-dynamic";

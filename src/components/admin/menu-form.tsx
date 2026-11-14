@@ -19,6 +19,7 @@ type EditorOption = {
   name: string;
   description: string;
   price: string;
+  isAvailable: boolean;
 };
 
 type EditorGroup = {
@@ -59,6 +60,7 @@ export type MenuEditorProduct = {
       name: string;
       description: string | null;
       price_pesewas: number;
+      is_available?: boolean;
     }>;
   }>;
 };
@@ -86,6 +88,7 @@ export function MenuForm({ product }: { product?: MenuEditorProduct }) {
             name: option.name,
             description: option.description ?? "",
             price: (option.price_pesewas / 100).toFixed(2),
+            isAvailable: option.is_available !== false,
           })),
         }))
       : [emptyGroup("draft-group", [emptyOption("draft-option")])],
@@ -160,6 +163,7 @@ export function MenuForm({ product }: { product?: MenuEditorProduct }) {
         name: option.name,
         description: option.description,
         price: option.price,
+        isAvailable: option.isAvailable,
       })),
     })),
   );
@@ -398,7 +402,7 @@ export function MenuForm({ product }: { product?: MenuEditorProduct }) {
                     {group.options.map((option) => (
                       <div
                         key={option.id}
-                        className="grid gap-2 rounded-xl bg-brand-white p-3 sm:grid-cols-[1fr_1fr_7rem_auto] sm:items-end"
+                        className={cn("grid gap-2 rounded-xl bg-brand-white p-3 sm:grid-cols-[1fr_1fr_7rem_auto] sm:items-end", !option.isAvailable && "opacity-70")}
                       >
                         <Input
                           label="Choice"
@@ -429,13 +433,24 @@ export function MenuForm({ product }: { product?: MenuEditorProduct }) {
                           }
                           placeholder="0.00"
                         />
-                        <button
-                          type="button"
-                          onClick={() => removeOption(group.id, option.id)}
-                          className="mb-0.5 text-xs font-semibold text-red-700 underline decoration-red-200 underline-offset-4"
-                        >
-                          Remove
-                        </button>
+                        <div className="mb-0.5 flex flex-col items-start gap-2">
+                          <label className="inline-flex items-center gap-2 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-brand-green/60">
+                            <input
+                              type="checkbox"
+                              checked={option.isAvailable}
+                              onChange={(event) => updateOption(group.id, option.id, { isAvailable: event.target.checked })}
+                              className="size-4 accent-[#174b20]"
+                            />
+                            Available
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => removeOption(group.id, option.id)}
+                            className="text-xs font-semibold text-red-700 underline decoration-red-200 underline-offset-4"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -692,6 +707,7 @@ function emptyOption(id: string = crypto.randomUUID()): EditorOption {
     name: "",
     description: "",
     price: "0.00",
+    isAvailable: true,
   };
 }
 

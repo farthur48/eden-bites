@@ -6,6 +6,7 @@ import type {
   CheckoutRequestItem,
   CheckoutState,
   FulfilmentMethod,
+  PaymentMethod,
 } from "@/lib/orders/types";
 import { getStoreAvailability } from "@/lib/store/availability";
 
@@ -31,6 +32,8 @@ export async function placeOrderAction(
   const phone = readField(formData, "phone", 30);
   const email = readField(formData, "email", 160);
   const fulfilmentValue = readField(formData, "fulfilment", 20);
+  const paymentValue = readField(formData, "paymentMethod", 40);
+  const idempotencyKey = readField(formData, "idempotencyKey", 120);
   const address = readField(formData, "address", 200);
   const area = readField(formData, "area", 120);
   const directions = readField(formData, "directions", 200);
@@ -70,6 +73,16 @@ export async function placeOrderAction(
     fieldErrors.area = "Add the area or neighbourhood for delivery.";
   }
 
+  const allowedPayments: PaymentMethod[] =
+    fulfilmentMethod === "delivery"
+      ? ["cash_on_delivery", "momo_on_delivery"]
+      : ["cash_on_pickup", "momo_on_pickup"];
+  const paymentMethod = allowedPayments.includes(paymentValue as PaymentMethod)
+    ? (paymentValue as PaymentMethod)
+    : fulfilmentMethod === "delivery"
+      ? "cash_on_delivery"
+      : "cash_on_pickup";
+
   if (Object.keys(fieldErrors).length > 0) {
     return {
       status: "error",
@@ -101,10 +114,12 @@ export async function placeOrderAction(
     phone,
     email: email || null,
     fulfilmentMethod,
+    paymentMethod,
     address: fulfilmentMethod === "delivery" ? address : null,
     area: fulfilmentMethod === "delivery" ? area : null,
     directions: directions || null,
     notes: notes || null,
+    idempotencyKey: idempotencyKey || null,
     items: cartResult.items,
   });
 

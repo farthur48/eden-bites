@@ -187,7 +187,7 @@ export function mapMenuProduct(
       "Please contact the kitchen if you have a food allergy.",
     optionGroups: productGroups.map((group) => {
       const groupOptions = options
-        .filter((option) => option.group_id === group.id)
+        .filter((option) => option.group_id === group.id && option.is_available !== false)
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((option) => ({
           id: option.id,

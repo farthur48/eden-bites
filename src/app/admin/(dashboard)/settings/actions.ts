@@ -87,6 +87,30 @@ export async function saveSettingsAction(
   redirect("/admin/settings?saved=1");
 }
 
+export async function toggleStoreAvailabilityAction(formData: FormData) {
+  await requireAdmin();
+  if (!hasPublicEnv()) redirect("/admin?store=error");
+
+  const nextOpen = formData.get("isOpen") === "true";
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("store_settings")
+      .upsert({ id: "main", is_open: nextOpen });
+    if (error) redirect("/admin?store=error");
+  } catch {
+    redirect("/admin?store=error");
+  }
+
+  revalidatePath("/");
+  revalidatePath("/menu");
+  revalidatePath("/cart");
+  revalidatePath("/checkout");
+  revalidatePath("/admin");
+  revalidatePath("/admin/settings");
+  redirect(`/admin?store=${nextOpen ? "open" : "closed"}`);
+}
+
 function readText(value: FormDataEntryValue | null, maxLength: number): string {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }

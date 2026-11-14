@@ -35,7 +35,7 @@ export function contactDetailsFromSettings(
   settings: StoreSettings | null,
 ): ContactDetails {
   const phone = clean(settings?.contact_phone) ?? contactDetails.phone;
-  const whatsapp = clean(settings?.whatsapp_number) ?? contactDetails.whatsapp;
+  const sms = clean(settings?.whatsapp_number) ?? contactDetails.sms ?? phone;
   const email = clean(settings?.contact_email) ?? contactDetails.email;
   const address = clean(settings?.contact_address) ?? contactDetails.address;
   const instagram =
@@ -43,11 +43,11 @@ export function contactDetailsFromSettings(
 
   return {
     phone,
-    whatsapp,
+    sms,
     email,
     address,
     instagram,
-    hasAny: Boolean(phone || whatsapp || email || address || instagram),
+    hasAny: Boolean(phone || sms || email || address || instagram),
   };
 }
 
@@ -56,6 +56,7 @@ export async function getPublicBusinessProfile(): Promise<{
   contact: ContactDetails;
   pickupInstructions: string | null;
   whatsappNumber: string | null;
+  smsNumber: string | null;
 }> {
   const settings = await getBusinessSettings();
   const contact = contactDetailsFromSettings(settings);
@@ -64,7 +65,8 @@ export async function getPublicBusinessProfile(): Promise<{
     settings,
     contact,
     pickupInstructions: clean(settings?.pickup_instructions),
-    whatsappNumber: contact.whatsapp,
+    whatsappNumber: contact.sms,
+    smsNumber: contact.sms,
   };
 }
 

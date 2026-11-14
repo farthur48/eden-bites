@@ -23,3 +23,33 @@ export function formatOrderStatus(status: string): string {
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }
+
+export function formatPaymentMethod(method: string): string {
+  switch (method) {
+    case "cash_on_delivery":
+      return "Cash on delivery";
+    case "cash_on_pickup":
+      return "Cash on pickup";
+    case "momo_on_delivery":
+      return "MoMo on delivery";
+    case "momo_on_pickup":
+      return "MoMo on pickup";
+    default:
+      return formatOrderStatus(method);
+  }
+}
+
+export function formatPaymentStatus(status: string): string {
+  switch (status) {
+    case "pending":
+      return "Pending";
+    case "paid":
+      return "Paid";
+    case "failed":
+      return "Failed";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return formatOrderStatus(status);
+  }
+}

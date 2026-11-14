@@ -2,7 +2,7 @@ import {
   instagramHref,
   mapsHref,
   phoneHref,
-  whatsappHref,
+  smsHref,
   type ContactDetails,
 } from "@/lib/site-config";
 import { cn } from "@/lib/utils";
@@ -33,12 +33,11 @@ export function ContactLinks({
     });
   }
 
-  if (details.whatsapp) {
+  if (details.sms) {
     items.push({
-      label: "WhatsApp",
-      value: details.whatsapp,
-      href: whatsappHref(details.whatsapp),
-      external: true,
+      label: "SMS",
+      value: details.sms,
+      href: smsHref(details.sms),
     });
   }
 

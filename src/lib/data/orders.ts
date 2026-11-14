@@ -12,6 +12,8 @@ export type AdminOrderListItem = Pick<
   | "customer_phone"
   | "status"
   | "fulfilment_method"
+  | "payment_method"
+  | "payment_status"
   | "delivery_fee_status"
   | "delivery_fee_pesewas"
   | "subtotal_pesewas"
@@ -32,6 +34,8 @@ export type OrderStats = {
   completed: number;
   cancelled: number;
   pendingDeliveryFees: number;
+  todayOrders: number;
+  todayConfirmedSalesPesewas: number;
 };
 
 const emptyStats: OrderStats = {
@@ -42,6 +46,8 @@ const emptyStats: OrderStats = {
   completed: 0,
   cancelled: 0,
   pendingDeliveryFees: 0,
+  todayOrders: 0,
+  todayConfirmedSalesPesewas: 0,
 };
 
 export async function getOrderStats(): Promise<OrderStats> {
@@ -51,7 +57,8 @@ export async function getOrderStats(): Promise<OrderStats> {
 
   try {
     const supabase = await createClient();
-    const [ordersResult, feesResult] = await Promise.all([
+    const todayStart = startOfTodayInAccraIso();
+    const [ordersResult, feesResult, todayResult, salesResult] = await Promise.all([
       supabase.from("orders").select("status"),
       supabase
         .from("orders")
@@ -59,9 +66,19 @@ export async function getOrderStats(): Promise<OrderStats> {
         .eq("fulfilment_method", "delivery")
         .eq("delivery_fee_status", "pending")
         .in("status", ["new", "preparing"]),
+      supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", todayStart),
+      supabase
+        .from("orders")
+        .select("total_pesewas, delivery_fee_status")
+        .eq("status", "completed")
+        .eq("payment_status", "paid")
+        .gte("created_at", todayStart),
     ]);
 
-    if (ordersResult.error || feesResult.error) {
+    if (ordersResult.error || feesResult.error || todayResult.error || salesResult.error) {
       return { ...emptyStats, status: "error" };
     }
 
@@ -76,6 +93,10 @@ export async function getOrderStats(): Promise<OrderStats> {
       counts[row.status] += 1;
     }
 
+    const todayConfirmedSalesPesewas = (salesResult.data ?? [])
+      .filter((row) => row.delivery_fee_status !== "pending")
+      .reduce((sum, row) => sum + (row.total_pesewas ?? 0), 0);
+
     return {
       status: "ready",
       total: (ordersResult.data ?? []).length,
@@ -84,6 +105,8 @@ export async function getOrderStats(): Promise<OrderStats> {
       completed: counts.completed,
       cancelled: counts.cancelled,
       pendingDeliveryFees: feesResult.count ?? 0,
+      todayOrders: todayResult.count ?? 0,
+      todayConfirmedSalesPesewas,
     };
   } catch {
     return { ...emptyStats, status: "error" };
@@ -120,7 +143,7 @@ export async function getRecentOrders(
     const { data, error } = await supabase
       .from("orders")
       .select(
-        "id, reference, customer_name, customer_phone, status, fulfilment_method, delivery_fee_status, delivery_fee_pesewas, subtotal_pesewas, total_pesewas, created_at",
+        "id, reference, customer_name, customer_phone, status, fulfilment_method, payment_method, payment_status, delivery_fee_status, delivery_fee_pesewas, subtotal_pesewas, total_pesewas, created_at",
       )
       .order("created_at", { ascending: false })
       .limit(limit);
@@ -154,7 +177,7 @@ export async function getOrders({
     let builder = supabase
       .from("orders")
       .select(
-        "id, reference, customer_name, customer_phone, status, fulfilment_method, delivery_fee_status, delivery_fee_pesewas, subtotal_pesewas, total_pesewas, created_at",
+        "id, reference, customer_name, customer_phone, status, fulfilment_method, payment_method, payment_status, delivery_fee_status, delivery_fee_pesewas, subtotal_pesewas, total_pesewas, created_at",
       )
       .order("created_at", { ascending: false })
       .limit(100);
@@ -216,4 +239,18 @@ export async function getOrderDetail(
   } catch {
     return null;
   }
+}
+
+function startOfTodayInAccraIso(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Accra",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+  const y = get("year");
+  const m = get("month");
+  const d = get("day");
+  return new Date(`${y}-${m}-${d}T00:00:00Z`).toISOString();
 }

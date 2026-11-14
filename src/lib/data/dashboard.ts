@@ -26,6 +26,8 @@ const emptySummary: DashboardSummary = {
     completed: 0,
     cancelled: 0,
     pendingDeliveryFees: 0,
+    todayOrders: 0,
+    todayConfirmedSalesPesewas: 0,
   },
   recentOrders: [],
   isDbAdmin: false,

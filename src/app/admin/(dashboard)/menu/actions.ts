@@ -209,6 +209,7 @@ function parseOptionGroups(
         name: optionName,
         description: readText(optionRecord.description, 300),
         pricePesewas,
+        isAvailable: optionRecord.isAvailable !== false,
       });
     }
 

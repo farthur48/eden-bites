@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { Bell, UserCircle2 } from "lucide-react";
+import { UserCircle2 } from "lucide-react";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { AdminNav } from "@/components/layout/admin-nav";
+import { AdminOrderNotifier } from "@/components/admin/admin-order-notifier";
 
 export function AdminShell({
   email,
@@ -34,16 +35,7 @@ export function AdminShell({
             </div>
             <div className="hidden lg:block" />
             <div className="flex items-center gap-2 sm:gap-3">
-              <button
-                type="button"
-                aria-label="Notifications"
-                className="relative inline-flex size-10 items-center justify-center rounded-xl text-brand-green-deep transition-colors hover:bg-brand-cream"
-              >
-                <Bell className="size-5" strokeWidth={1.8} />
-                {newOrderCount > 0 ? (
-                  <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-brand-lime ring-2 ring-white" />
-                ) : null}
-              </button>
+              <AdminOrderNotifier initialNewCount={newOrderCount} />
               <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-white px-2.5 py-1.5 sm:px-3">
                 <UserCircle2 className="size-5 text-brand-green/60" strokeWidth={1.6} />
                 <span className="hidden max-w-[12rem] truncate text-xs font-medium text-brand-green-deep sm:block">

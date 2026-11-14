@@ -6,6 +6,7 @@ import { Container } from "@/components/layout/container";
 export const metadata: Metadata = {
   title: "Photo credits",
   description: "Attribution for the food photography used on the Eden Bites menu.",
+  alternates: { canonical: "/credits" },
 };
 
 const photos = [

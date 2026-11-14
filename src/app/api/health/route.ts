@@ -6,11 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const configured = hasPublicEnv();
+  let healthy = false;
 
-  let database: "unconfigured" | "reachable" | "unreachable" = "unconfigured";
-
-  if (configured) {
+  if (hasPublicEnv()) {
     try {
       const supabase = await createClient();
       const { error } = await supabase
@@ -19,22 +17,17 @@ export async function GET() {
         .eq("id", "main")
         .maybeSingle();
 
-      database = error ? "unreachable" : "reachable";
+      healthy = !error;
     } catch {
-      database = "unreachable";
+      healthy = false;
     }
   }
 
-  const healthy = configured && database === "reachable";
-
   return NextResponse.json(
+    { status: healthy ? "ok" : "degraded" },
     {
-      status: healthy ? "ok" : "degraded",
-      services: {
-        supabaseEnv: configured ? "configured" : "missing",
-        database,
-      },
+      status: healthy ? 200 : 503,
+      headers: { "Cache-Control": "no-store" },
     },
-    { status: healthy ? 200 : 503 },
   );
 }

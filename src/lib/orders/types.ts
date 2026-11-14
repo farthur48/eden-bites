@@ -4,6 +4,14 @@ export type OrderStatus = "new" | "preparing" | "completed" | "cancelled";
 
 export type DeliveryFeeStatus = "pending" | "confirmed" | "not_required";
 
+export type PaymentMethod =
+  | "cash_on_delivery"
+  | "cash_on_pickup"
+  | "momo_on_delivery"
+  | "momo_on_pickup";
+
+export type PaymentStatus = "pending" | "paid" | "failed" | "cancelled";
+
 export type CheckoutRequestItem = {
   productId: string;
   optionIds: string[];
@@ -35,6 +43,8 @@ export type OrderConfirmation = {
   phone: string;
   email: string | null;
   fulfilmentMethod: FulfilmentMethod;
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
   address: string | null;
   area: string | null;
   directions: string | null;
@@ -50,7 +60,7 @@ export type OrderConfirmation = {
 };
 
 export type CheckoutFieldErrors = Partial<
-  Record<"name" | "phone" | "email" | "address" | "area" | "cart" | "form", string>
+  Record<"name" | "phone" | "email" | "address" | "area" | "payment" | "cart" | "form", string>
 >;
 
 export type CheckoutState =

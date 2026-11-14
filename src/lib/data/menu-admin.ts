@@ -43,6 +43,7 @@ export type MenuProductInput = {
       name: string;
       description: string;
       pricePesewas: number;
+      isAvailable: boolean;
     }>;
   }>;
 };
@@ -248,6 +249,7 @@ export async function saveMenuProduct(
               name: option.name,
               description: option.description || null,
               price_pesewas: option.pricePesewas,
+              is_available: option.isAvailable,
               sort_order: optionIndex,
             })),
           );

@@ -28,6 +28,7 @@ export function CheckoutForm({
   const cart = useCart();
   const router = useRouter();
   const [fulfilment, setFulfilment] = useState<FulfilmentMethod>("delivery");
+  const [idempotencyKey] = useState(() => createIdempotencyKey());
   const [state, formAction, isPending] = useActionState(placeOrderAction, initialState);
 
   useEffect(() => {
@@ -70,11 +71,22 @@ export function CheckoutForm({
       quantity: item.quantity,
     })),
   );
+  const paymentOptions =
+    fulfilment === "delivery"
+      ? [
+          { value: "cash_on_delivery", label: "Cash on delivery" },
+          { value: "momo_on_delivery", label: "MoMo on delivery" },
+        ]
+      : [
+          { value: "cash_on_pickup", label: "Cash on pickup" },
+          { value: "momo_on_pickup", label: "MoMo on pickup" },
+        ];
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.75fr)] lg:items-start">
       <form action={formAction} className="space-y-5">
         <input type="hidden" name="cart" value={cartPayload} readOnly />
+        <input type="hidden" name="idempotencyKey" value={idempotencyKey} readOnly />
 
         {!store.isOpen ? (
           <p role="alert" className="rounded-xl bg-amber-50 px-5 py-4 text-sm font-medium text-amber-900">
@@ -161,6 +173,26 @@ export function CheckoutForm({
             </div>
           </section>
         )}
+
+        <fieldset className="rounded-[1.25rem] border border-border/80 bg-white p-5 sm:p-7">
+          <legend className="font-display text-xl font-bold text-brand-green-deep">Payment Arrangement</legend>
+          <p className="mt-2 text-sm text-muted">No online payment now. Choose how you will pay on {fulfilment}.</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {paymentOptions.map((option, index) => (
+              <label key={option.value} className="flex cursor-pointer items-center gap-3 rounded-xl border border-border p-4 hover:border-brand-green/30">
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value={option.value}
+                  defaultChecked={index === 0}
+                  className="size-4 accent-[#174b20]"
+                />
+                <span className="text-sm font-medium text-brand-green-deep">{option.label}</span>
+              </label>
+            ))}
+          </div>
+          {fieldErrors?.payment ? <p className="mt-2 text-xs text-red-700">{fieldErrors.payment}</p> : null}
+        </fieldset>
 
         <section className="rounded-[1.25rem] border border-border/80 bg-white p-5 sm:p-7">
           <h2 className="font-display text-xl font-bold text-brand-green-deep">Additional Instructions</h2>
@@ -280,4 +312,8 @@ function CheckoutSkeleton() {
       <div className="h-80 animate-pulse rounded-[1.25rem] border border-border/80 bg-white" />
     </div>
   );
+}
+
+function createIdempotencyKey(): string {
+  return `${Date.now().toString(36)}-${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 }

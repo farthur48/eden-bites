@@ -6,9 +6,9 @@ import { CheckCircle2, MessageCircle } from "lucide-react";
 import { Container } from "@/components/layout/container";
 import { buttonStyles } from "@/components/ui/button";
 import { getPublicBusinessProfile } from "@/lib/data/settings";
-import { formatDateTime, formatGhs } from "@/lib/format";
+import { formatDateTime, formatGhs, formatPaymentMethod, formatPaymentStatus } from "@/lib/format";
 import { getOrderConfirmation } from "@/lib/orders/service";
-import { whatsappHref } from "@/lib/site-config";
+import { smsHref } from "@/lib/site-config";
 
 export const metadata: Metadata = {
   title: "Order confirmation",
@@ -32,9 +32,8 @@ export default async function OrderConfirmationPage({
 
   const isDelivery = order.fulfilmentMethod === "delivery";
   const deliveryFeePending = isDelivery && order.deliveryFeeStatus === "pending";
-  const whatsappMessage = encodeURIComponent(
-    `Hello Eden Bites, I would like to confirm my order ${order.reference}.`,
-  );
+  const smsMessage =
+    `Hello Eden Bites, I would like to confirm my order ${order.reference}.`;
 
   return (
     <section className="bg-background py-12 sm:py-16 lg:py-20">
@@ -49,7 +48,7 @@ export default async function OrderConfirmationPage({
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-muted">
               Thank you{order.customerName ? `, ${order.customerName.split(" ")[0]}` : ""}. We&apos;ve received your order and will contact you on{" "}
-              <strong className="font-semibold text-brand-green-deep">{order.phone}</strong> to confirm the details and final amount.
+              <strong className="font-semibold text-brand-green-deep">{order.phone}</strong> to confirm the details and final amount. Payment is due upon {isDelivery ? "delivery" : "pickup"}.
             </p>
           </div>
 
@@ -83,6 +82,13 @@ export default async function OrderConfirmationPage({
                       {profile.pickupInstructions || "Pickup details will be confirmed with you."}
                     </dd>
                   )}
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-[0.65rem] font-bold uppercase tracking-[0.16em] text-brand-green/50">Payment</dt>
+                  <dd className="mt-1 text-sm font-semibold text-brand-green-deep">
+                    {formatPaymentMethod(order.paymentMethod)} · {formatPaymentStatus(order.paymentStatus)}
+                  </dd>
+                  <dd className="mt-0.5 text-xs text-muted">No online payment taken. Payment status is confirmed by the kitchen.</dd>
                 </div>
               </dl>
 
@@ -136,15 +142,13 @@ export default async function OrderConfirmationPage({
           </div>
 
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            {profile.whatsappNumber ? (
+            {(profile.smsNumber || profile.whatsappNumber) ? (
               <a
-                href={`${whatsappHref(profile.whatsappNumber)}?text=${whatsappMessage}`}
-                target="_blank"
-                rel="noreferrer"
+                href={smsHref((profile.smsNumber || profile.whatsappNumber)!, smsMessage)}
                 className={buttonStyles({ variant: "accent", size: "lg", className: "w-full sm:w-auto" })}
               >
                 <MessageCircle className="size-4" />
-                Contact on WhatsApp
+                Contact by SMS
               </a>
             ) : null}
             <Link href="/" className={buttonStyles({ variant: "outline", size: "lg", className: "w-full sm:w-auto" })}>
@@ -152,7 +156,7 @@ export default async function OrderConfirmationPage({
             </Link>
           </div>
           <p className="mt-6 text-center text-xs text-muted">
-            Keep your order reference <span className="font-semibold text-brand-green-deep">{order.reference}</span> for any follow-up.
+            Keep your order reference <span className="font-semibold text-brand-green-deep">{order.reference}</span> and this confirmation link private for any follow-up.
           </p>
         </div>
       </Container>

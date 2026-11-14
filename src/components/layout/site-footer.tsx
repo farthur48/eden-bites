@@ -8,7 +8,7 @@ import {
   instagramHref,
   mapsHref,
   phoneHref,
-  whatsappHref,
+  smsHref,
 } from "@/lib/site-config";
 
 const year = new Date().getFullYear();
@@ -29,8 +29,8 @@ export async function SiteFooter() {
     contact.instagram
       ? { label: "Instagram", href: instagramHref(contact.instagram), icon: Camera }
       : null,
-    contact.whatsapp
-      ? { label: "WhatsApp", href: whatsappHref(contact.whatsapp), icon: MessageCircle }
+    contact.sms
+      ? { label: "SMS", href: smsHref(contact.sms), icon: MessageCircle }
       : null,
     contact.phone
       ? { label: "Call", href: phoneHref(contact.phone), icon: Phone }

@@ -49,10 +49,10 @@ export function SettingsForm({ settings }: { settings: StoreSettings | null }) {
                 className="sm:col-span-2"
               />
               <Field
-                label="WhatsApp number"
+                label="SMS / contact number"
                 name="whatsappNumber"
                 defaultValue={settings?.whatsapp_number ?? ""}
-                placeholder="+233 24 000 0000"
+                placeholder="0594528883"
                 className="sm:col-span-2"
               />
               <Field
@@ -113,24 +113,26 @@ export function SettingsForm({ settings }: { settings: StoreSettings | null }) {
                   Controls whether customers can place orders.
                 </p>
               </div>
-              <label className="inline-flex items-center gap-2 rounded-full bg-brand-sand/70 px-4 py-2 text-sm font-semibold text-brand-green">
+              <label className="inline-flex items-center gap-3 rounded-full border border-brand-green/15 bg-brand-sand/70 px-4 py-2 text-sm font-semibold text-brand-green-deep shadow-sm">
+                <span className="text-xs uppercase tracking-[0.14em] text-brand-green/60">Orders</span>
                 <input
                   type="checkbox"
                   name="isOpen"
                   defaultChecked={settings?.is_open ?? true}
-                  className="size-4 accent-[#174b20]"
+                  className="h-5 w-9 cursor-pointer appearance-none rounded-full bg-brand-green/20 transition before:ml-0.5 before:block before:size-4 before:rounded-full before:bg-white before:transition checked:bg-brand-green checked:before:translate-x-4"
+                  aria-label="Store open for orders"
                 />
-                Store open
+                <span>ON / OFF</span>
               </label>
             </div>
 
             <div className="mt-4">
               <Field
-                label="Opening note"
+                label="Opening note / closed-store message"
                 name="openingNote"
                 defaultValue={settings?.opening_note ?? ""}
                 textarea
-                placeholder="Optional note shown on the menu and checkout."
+                placeholder="Shown on the menu/checkout. When closed, this is the unavailable message."
               />
             </div>
           </section>
@@ -203,8 +205,7 @@ export function SettingsForm({ settings }: { settings: StoreSettings | null }) {
               Notifications
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-muted">
-              New orders always show a dashboard indicator. WhatsApp alerts use
-              the business WhatsApp number.
+              New orders always show a dashboard indicator. Automated SMS alerts can notify the kitchen number when configured.
             </p>
 
             <div className="mt-4 space-y-3">
@@ -234,10 +235,10 @@ export function SettingsForm({ settings }: { settings: StoreSettings | null }) {
                 />
                 <span>
                   <span className="block text-sm font-semibold text-brand-green">
-                    WhatsApp alerts
+                    SMS quick-contact alerts
                   </span>
                   <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                    Enable one-tap WhatsApp alerts from order details.
+                    Enable one-tap SMS contact actions from order details.
                   </span>
                 </span>
               </label>

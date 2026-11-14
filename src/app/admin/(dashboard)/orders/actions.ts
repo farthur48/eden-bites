@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import type { OrderStatus } from "@/types/database";
+import type { OrderStatus, PaymentStatus } from "@/types/database";
 
 const statuses: OrderStatus[] = ["new", "preparing", "completed", "cancelled"];
 
@@ -20,9 +20,35 @@ export async function updateOrderStatusAction(formData: FormData) {
   }
 
   const supabase = await createClient();
+  const { data: order } = await supabase
+    .from("orders")
+    .select("status, fulfilment_method, delivery_fee_status, payment_status")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!order) {
+    redirect(`/admin/orders/${id}?updated=error`);
+  }
+
+  if (!isAllowedStatusTransition(order.status as OrderStatus, status as OrderStatus)) {
+    redirect(`/admin/orders/${id}?updated=invalid`);
+  }
+
+  if (
+    status === "completed" &&
+    order.fulfilment_method === "delivery" &&
+    order.delivery_fee_status === "pending"
+  ) {
+    redirect(`/admin/orders/${id}?updated=needs_fee`);
+  }
+
+  const currentPayment = ((order.payment_status as PaymentStatus | null) ?? "pending");
+  const nextPaymentStatus: PaymentStatus =
+    status === "cancelled" && currentPayment !== "paid" ? "cancelled" : currentPayment;
+
   const { error } = await supabase
     .from("orders")
-    .update({ status: status as OrderStatus })
+    .update({ status: status as OrderStatus, payment_status: nextPaymentStatus })
     .eq("id", id);
 
   revalidatePath("/admin");
@@ -30,6 +56,17 @@ export async function updateOrderStatusAction(formData: FormData) {
   revalidatePath(`/admin/orders/${id}`);
 
   redirect(`/admin/orders/${id}?updated=${error ? "error" : status}`);
+}
+
+function isAllowedStatusTransition(from: OrderStatus, to: OrderStatus): boolean {
+  if (from === to) return true;
+  const allowed: Record<OrderStatus, OrderStatus[]> = {
+    new: ["preparing", "completed", "cancelled"],
+    preparing: ["completed", "cancelled"],
+    completed: [],
+    cancelled: [],
+  };
+  return allowed[from].includes(to);
 }
 
 export async function updateDeliveryFeeAction(formData: FormData) {
@@ -114,6 +151,29 @@ export async function resetDeliveryFeeAction(formData: FormData) {
   revalidatePath(`/admin/orders/${id}`);
 
   redirect(`/admin/orders/${id}?fee=${error ? "error" : "reset"}`);
+}
+
+export async function updatePaymentStatusAction(formData: FormData) {
+  await requireAdmin();
+
+  const id = readUuid(formData.get("orderId"));
+  const paymentStatus = String(formData.get("paymentStatus") ?? "");
+
+  if (!id || !["pending", "paid", "failed", "cancelled"].includes(paymentStatus)) {
+    redirect("/admin/orders");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("orders")
+    .update({ payment_status: paymentStatus as PaymentStatus })
+    .eq("id", id);
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/orders");
+  revalidatePath(`/admin/orders/${id}`);
+
+  redirect(`/admin/orders/${id}?payment=${error ? "error" : "saved"}`);
 }
 
 function readUuid(value: FormDataEntryValue | null): string | null {
