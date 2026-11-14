@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-lime: #b5f522;
+  --color-brand-lime-deep: #9fdb16;
+  --color-brand-green: #174b20;
+  --color-brand-green-deep: #0e3215;
+  --color-brand-green-soft: #245c2e;
+  --color-brand-black: #141414;
+  --color-brand-white: #ffffff;
+  --color-brand-cream: #f7f6ef;
+  --color-brand-sand: #eceadf;
+
+  --color-background: #fcfcf9;
+  --color-foreground: #141414;
+  --color-muted: #5f6b60;
+  --color-border: #e6e4d8;
+  --color-card: #ffffff;
+
+  --radius-brand: 1.25rem;
+  --shadow-soft: 0 20px 50px -30px rgba(20, 20, 20, 0.35);
+}
+
+@theme inline {
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+  }
+
+  ::selection {
+    background-color: var(--color-brand-lime);
+    color: var(--color-brand-black);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-green);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  .surface-card {
+    background: white;
+    border: 1px solid rgba(23, 75, 32, 0.08);
+    border-radius: var(--radius-brand);
+    box-shadow: 0 1px 0 rgba(20, 20, 20, 0.02);
+  }
+}
