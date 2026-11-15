@@ -47,7 +47,7 @@ export const metadata: Metadata = {
     url: "/",
     images: [
       {
-        url: "/menu/banku-tilapia.jpg",
+        url: "https://yrpelohqsxqmvjqxcmgg.supabase.co/storage/v1/object/public/product-images/products/banku-tilapia.jpg",
         width: 1200,
         height: 630,
         alt: "Freshly prepared meal from Eden Bites",
@@ -59,7 +59,7 @@ export const metadata: Metadata = {
     title: "Eden Bites - Good Food. Great Moments. Every Bite.",
     description:
       "Freshly made Ghanaian meals for delivery or pickup. Order online and pay on arrival.",
-    images: ["/menu/banku-tilapia.jpg"],
+    images: ["https://yrpelohqsxqmvjqxcmgg.supabase.co/storage/v1/object/public/product-images/products/banku-tilapia.jpg"],
   },
   robots: {
     index: true,

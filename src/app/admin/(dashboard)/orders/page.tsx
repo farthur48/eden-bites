@@ -19,6 +19,7 @@ const filters: Array<{ value: OrderStatus | "all"; label: string }> = [
   { value: "all", label: "All" },
   { value: "new", label: "New" },
   { value: "preparing", label: "Preparing" },
+  { value: "out_for_delivery", label: "Out for delivery" },
   { value: "completed", label: "Completed" },
   { value: "cancelled", label: "Cancelled" },
 ];
@@ -31,6 +32,8 @@ function statusVariant(status: OrderStatus): BadgeVariant {
       return "danger";
     case "new":
       return "warning";
+    case "out_for_delivery":
+      return "lime";
     default:
       return "default";
   }
@@ -56,7 +59,7 @@ export default async function AdminOrdersPage({
         (order) =>
           order.fulfilment_method === "delivery" &&
           order.delivery_fee_status === "pending" &&
-          (order.status === "new" || order.status === "preparing"),
+          (order.status === "new" || order.status === "preparing" || order.status === "out_for_delivery"),
       )
     : result.orders;
 
@@ -103,11 +106,13 @@ export default async function AdminOrdersPage({
               ? stats.newOrders
               : filter.value === "preparing"
                 ? stats.preparing
-                : filter.value === "completed"
-                  ? stats.completed
-                  : filter.value === "cancelled"
-                    ? stats.cancelled
-                    : null;
+                : filter.value === "out_for_delivery"
+                  ? stats.outForDelivery
+                  : filter.value === "completed"
+                    ? stats.completed
+                    : filter.value === "cancelled"
+                      ? stats.cancelled
+                      : null;
           return (
             <Link
               key={filter.value}
@@ -226,7 +231,7 @@ export default async function AdminOrdersPage({
 }
 
 function parseStatus(value: string | undefined): OrderStatus | "all" {
-  return value === "new" || value === "preparing" || value === "completed" || value === "cancelled"
+  return value === "new" || value === "preparing" || value === "out_for_delivery" || value === "completed" || value === "cancelled"
     ? value
     : "all";
 }

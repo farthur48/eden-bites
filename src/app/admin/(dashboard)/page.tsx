@@ -23,6 +23,8 @@ function statusVariant(status: OrderStatus): BadgeVariant {
       return "danger";
     case "new":
       return "warning";
+    case "out_for_delivery":
+      return "lime";
     default:
       return "default";
   }
@@ -32,6 +34,7 @@ const statCards = [
   { key: "today", label: "Orders Today", icon: ShoppingBag },
   { key: "new", label: "New Orders", icon: Clock3 },
   { key: "preparing", label: "Preparing", icon: TrendingUp },
+  { key: "out_for_delivery", label: "Out for delivery", icon: TrendingUp },
   { key: "completed", label: "Completed", icon: CheckCircle2 },
 ] as const;
 
@@ -141,7 +144,9 @@ export default async function AdminOverviewPage({
                     ? summary.stats.newOrders
                     : card.key === "preparing"
                       ? summary.stats.preparing
-                      : summary.stats.completed;
+                      : card.key === "out_for_delivery"
+                        ? summary.stats.outForDelivery
+                        : summary.stats.completed;
               return (
                 <div key={card.key} className="rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
                   <div className="flex items-start justify-between gap-4">

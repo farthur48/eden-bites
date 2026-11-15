@@ -1,16 +1,20 @@
-﻿import "server-only";
+import "server-only";
 
-import { formatDateTime, formatGhs } from "@/lib/format";
+import nodemailer from "nodemailer";
+
+import { formatDateTime, formatGhs, formatOrderStatus, formatPaymentMethod } from "@/lib/format";
 import type { OrderConfirmation } from "@/lib/orders/types";
-import { getSmsServerConfig, normalizePhone } from "@/lib/env.server";
+import { getEmailServerConfig, getSmsServerConfig, normalizePhone } from "@/lib/env.server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database";
 
-type Channel = "dashboard" | "sms_business" | "sms_customer";
+type Channel = "dashboard" | "sms_business" | "sms_customer" | "email_business" | "email_customer";
+type OrderEvent = "order_placed" | "order_out_for_delivery" | "order_delivered";
 type NotificationRow = {
   id: string;
   order_id: string;
   channel: Channel;
+  event: string;
   status: "pending" | "processing" | "sent" | "failed" | "skipped";
   recipient: string | null;
   payload: Json;
@@ -19,22 +23,40 @@ type NotificationRow = {
   next_attempt_at: string;
 };
 
-const EVENT = "order_created";
-
-export async function enqueueOrderNotifications(input: {
+export async function enqueueOrderPlacedNotifications(input: {
   orderId: string;
   confirmation: OrderConfirmation;
 }): Promise<void> {
+  await enqueueOrderEventNotifications({ ...input, event: "order_placed" });
+}
+
+export async function enqueueOrderStatusNotifications(input: {
+  orderId: string;
+  confirmation: OrderConfirmation;
+  event: OrderEvent;
+}): Promise<void> {
+  await enqueueOrderEventNotifications(input);
+}
+
+async function enqueueOrderEventNotifications(input: {
+  orderId: string;
+  confirmation: OrderConfirmation;
+  event: OrderEvent;
+}): Promise<void> {
   if (!input.orderId) return;
   const supabase = createAdminClient();
-  const payload = buildBusinessPayload(input.confirmation);
+  const payload = buildPayload(input.confirmation, input.event);
   const now = new Date().toISOString();
+  const sms = getSmsServerConfig();
+  const email = getEmailServerConfig();
+  const customerPhone = normalizePhone(input.confirmation.phone) || null;
+  const customerEmail = input.confirmation.email?.trim() || null;
 
   const rows = [
     {
       order_id: input.orderId,
       channel: "dashboard" as const,
-      event: EVENT,
+      event: input.event,
       status: "sent" as const,
       recipient: "admin_dashboard",
       provider: "supabase",
@@ -45,32 +67,28 @@ export async function enqueueOrderNotifications(input: {
       last_attempt_at: now,
       delivered_at: now,
     },
-    {
-      order_id: input.orderId,
-      channel: "sms_business" as const,
-      event: EVENT,
-      status: "pending" as const,
-      recipient: getSmsServerConfig()?.businessTo ?? null,
-      provider: "termii",
-      payload: payload as unknown as Json,
-      attempt_count: 0,
-      max_attempts: 5,
-      next_attempt_at: now,
-    },
-    {
-      order_id: input.orderId,
-      channel: "sms_customer" as const,
-      event: EVENT,
-      status: "skipped" as const,
-      recipient: normalizePhone(input.confirmation.phone) || null,
-      provider: "termii",
-      payload: payload as unknown as Json,
-      attempt_count: 0,
-      max_attempts: 1,
-      next_attempt_at: now,
-      error_message:
-        "Automated customer SMS is not enabled (requires consent/provider configuration).",
-    },
+    buildSmsRow(input.orderId, input.event, "sms_business", sms?.businessTo ?? null, sms?.enabled ?? false, payload, now),
+    buildSmsRow(
+      input.orderId,
+      input.event,
+      "sms_customer",
+      customerPhone,
+      sms?.enabled ?? false,
+      payload,
+      now,
+      !customerPhone ? "Customer phone number is missing." : null,
+    ),
+    buildEmailRow(input.orderId, input.event, "email_business", email?.businessTo ?? null, email?.enabled ?? false, payload, now),
+    buildEmailRow(
+      input.orderId,
+      input.event,
+      "email_customer",
+      customerEmail,
+      email?.enabled ?? false,
+      payload,
+      now,
+      !customerEmail ? "Customer email address is missing." : null,
+    ),
   ];
 
   try {
@@ -79,11 +97,63 @@ export async function enqueueOrderNotifications(input: {
       ignoreDuplicates: true,
     });
     if (error) {
-      console.error("[notifications] enqueue_failed", { orderId: input.orderId, error: error.message });
+      console.error("[notifications] enqueue_failed", { orderId: input.orderId, event: input.event, error: error.message });
     }
   } catch (error) {
-    console.error("[notifications] enqueue_exception", { orderId: input.orderId, error: safeError(error) });
+    console.error("[notifications] enqueue_exception", { orderId: input.orderId, event: input.event, error: safeError(error) });
   }
+}
+
+function buildSmsRow(
+  orderId: string,
+  event: OrderEvent,
+  channel: "sms_business" | "sms_customer",
+  recipient: string | null,
+  enabled: boolean,
+  payload: ReturnType<typeof buildPayload>,
+  now: string,
+  missingReason?: string | null,
+) {
+  const reason = missingReason ?? (!enabled ? "SMS notifications are not configured." : null);
+  return {
+    order_id: orderId,
+    channel,
+    event,
+    status: reason ? ("skipped" as const) : ("pending" as const),
+    recipient,
+    provider: "hubtel",
+    payload: payload as unknown as Json,
+    attempt_count: 0,
+    max_attempts: 5,
+    next_attempt_at: now,
+    error_message: reason,
+  };
+}
+
+function buildEmailRow(
+  orderId: string,
+  event: OrderEvent,
+  channel: "email_business" | "email_customer",
+  recipient: string | null,
+  enabled: boolean,
+  payload: ReturnType<typeof buildPayload>,
+  now: string,
+  missingReason?: string | null,
+) {
+  const reason = missingReason ?? (!enabled ? "Email notifications are not configured." : null);
+  return {
+    order_id: orderId,
+    channel,
+    event,
+    status: reason ? ("skipped" as const) : ("pending" as const),
+    recipient,
+    provider: "gmail",
+    payload: payload as unknown as Json,
+    attempt_count: 0,
+    max_attempts: 5,
+    next_attempt_at: now,
+    error_message: reason,
+  };
 }
 
 export async function dispatchPendingNotifications(options?: {
@@ -94,11 +164,11 @@ export async function dispatchPendingNotifications(options?: {
   const nowIso = new Date().toISOString();
   let query = supabase
     .from("order_notifications")
-    .select("id,order_id,channel,status,recipient,payload,attempt_count,max_attempts,next_attempt_at")
+    .select("id,order_id,channel,event,status,recipient,payload,attempt_count,max_attempts,next_attempt_at")
     .in("status", ["pending", "failed"])
     .lte("next_attempt_at", nowIso)
     .order("next_attempt_at", { ascending: true })
-    .limit(options?.limit ?? 10);
+    .limit(options?.limit ?? 20);
   if (options?.orderId) query = query.eq("order_id", options.orderId);
 
   const { data, error } = await query;
@@ -109,46 +179,26 @@ export async function dispatchPendingNotifications(options?: {
 
   const summary = { processed: 0, sent: 0, failed: 0, skipped: 0 };
   for (const row of data as NotificationRow[]) {
-    if (row.channel === "dashboard" || row.channel === "sms_customer") {
+    if (row.channel === "dashboard") {
       summary.skipped += 1;
       continue;
     }
     summary.processed += 1;
-    const result = await deliverBusinessSms(row);
-    if (result === "sent") summary.sent += 1;
-    else if (result === "failed") summary.failed += 1;
-    else summary.skipped += 1;
+    const result = await deliver(row);
+    summary[result] += 1;
   }
   return summary;
 }
 
-async function deliverBusinessSms(row: NotificationRow): Promise<"sent" | "failed" | "skipped"> {
+async function deliver(row: NotificationRow): Promise<"sent" | "failed" | "skipped"> {
+  if (row.channel === "sms_business" || row.channel === "sms_customer") return deliverSms(row);
+  if (row.channel === "email_business" || row.channel === "email_customer") return deliverEmail(row);
+  return "skipped";
+}
+
+async function claim(row: NotificationRow): Promise<boolean> {
   const supabase = createAdminClient();
-  const config = getSmsServerConfig();
   const now = new Date().toISOString();
-
-  if (!config) {
-    await supabase
-      .from("order_notifications")
-      .update({
-        status: "skipped",
-        provider: "termii",
-        error_message: "SMS not configured. Set SMS_NOTIFICATIONS_ENABLED=true and SMS_API_KEY/SMS_BUSINESS_TO.",
-        updated_at: now,
-      } as never)
-      .eq("id", row.id);
-    console.warn("[notifications] sms_not_configured", { notificationId: row.id, orderId: row.order_id });
-    return "skipped";
-  }
-
-  if (row.attempt_count >= row.max_attempts) {
-    await supabase
-      .from("order_notifications")
-      .update({ status: "failed", error_message: "Max delivery attempts reached.", updated_at: now } as never)
-      .eq("id", row.id);
-    return "failed";
-  }
-
   const claim = await supabase
     .from("order_notifications")
     .update({ status: "processing", last_attempt_at: now, updated_at: now } as never)
@@ -156,61 +206,120 @@ async function deliverBusinessSms(row: NotificationRow): Promise<"sent" | "faile
     .in("status", ["pending", "failed"])
     .select("id")
     .maybeSingle();
-  if (claim.error || !claim.data) return "skipped";
+  return !claim.error && !!claim.data;
+}
+
+async function deliverSms(row: NotificationRow): Promise<"sent" | "failed" | "skipped"> {
+  const supabase = createAdminClient();
+  const config = getSmsServerConfig();
+  const now = new Date().toISOString();
+  if (!config) {
+    await supabase.from("order_notifications").update({ status: "skipped", provider: "hubtel", error_message: "SMS notifications are not configured.", updated_at: now } as never).eq("id", row.id);
+    return "skipped";
+  }
+  if (!row.recipient) {
+    await supabase.from("order_notifications").update({ status: "skipped", provider: "hubtel", error_message: "SMS recipient is missing.", updated_at: now } as never).eq("id", row.id);
+    return "skipped";
+  }
+  if (row.attempt_count >= row.max_attempts) {
+    await supabase.from("order_notifications").update({ status: "failed", error_message: "Max delivery attempts reached.", updated_at: now } as never).eq("id", row.id);
+    return "failed";
+  }
+  if (!(await claim(row))) return "skipped";
 
   try {
-    const body = buildMessageFromPayload(row.payload);
-    const to = row.recipient || config.businessTo;
-    const response = await fetch(config.baseUrl + "/api/sms/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        to,
-        from: config.senderId,
-        sms: body.slice(0, 1600),
-        type: "plain",
-        channel: config.channel,
-        api_key: config.apiKey,
-      }),
-    });
+    const message = buildSmsMessageFromPayload(row.payload, row.channel);
+    const url = new URL(config.baseUrl);
+    url.searchParams.set("clientid", config.clientId);
+    url.searchParams.set("clientsecret", config.clientSecret);
+    url.searchParams.set("from", config.senderId);
+    url.searchParams.set("to", row.recipient);
+    url.searchParams.set("content", message.slice(0, 1600));
 
+    const response = await fetch(url.toString(), { method: "GET" });
     const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!response.ok) {
-      const message = sanitizeProviderError(data) || `SMS API error (${response.status})`;
-      return await markFailed(row, message);
-    }
+    if (!response.ok) return await markFailed(row, sanitizeProviderError(data) || `Hubtel SMS error (${response.status})`, "hubtel");
 
-    const code = String(data.code ?? "").toLowerCase();
-    if (code && code !== "ok" && !code.includes("success")) {
-      const message = sanitizeProviderError(data) || `SMS provider response: ${code}`;
-      return await markFailed(row, message);
+    const status = String(data.status ?? data.Status ?? "").toLowerCase();
+    if (status && status !== "0" && !status.includes("success") && !status.includes("ok")) {
+      return await markFailed(row, sanitizeProviderError(data) || `Hubtel SMS status: ${status}`, "hubtel");
     }
 
     const providerMessageId =
-      typeof data.message_id === "string"
-        ? data.message_id
-        : typeof data.messageId === "string"
-          ? data.messageId
-          : null;
-    await supabase
-      .from("order_notifications")
-      .update({
-        status: "sent",
-        provider: "termii",
-        provider_message_id: providerMessageId,
-        attempt_count: row.attempt_count + 1,
-        error_message: null,
-        delivered_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      } as never)
-      .eq("id", row.id);
+      typeof data.messageId === "string" ? data.messageId :
+      typeof data.MessageId === "string" ? data.MessageId : null;
+    await markSent(row, "hubtel", providerMessageId);
     return "sent";
   } catch (error) {
-    return await markFailed(row, safeError(error));
+    return await markFailed(row, safeError(error), "hubtel");
   }
 }
 
-async function markFailed(row: NotificationRow, message: string): Promise<"failed"> {
+let mailer: ReturnType<typeof nodemailer.createTransport> | null = null;
+function getMailer() {
+  if (mailer) return mailer;
+  const config = getEmailServerConfig();
+  if (!config) return null;
+  mailer = nodemailer.createTransport({
+    service: "gmail",
+    auth: { user: config.user, pass: config.appPassword },
+  });
+  return mailer;
+}
+
+async function deliverEmail(row: NotificationRow): Promise<"sent" | "failed" | "skipped"> {
+  const supabase = createAdminClient();
+  const config = getEmailServerConfig();
+  const now = new Date().toISOString();
+  if (!config) {
+    await supabase.from("order_notifications").update({ status: "skipped", provider: "gmail", error_message: "Email notifications are not configured.", updated_at: now } as never).eq("id", row.id);
+    return "skipped";
+  }
+  if (!row.recipient) {
+    await supabase.from("order_notifications").update({ status: "skipped", provider: "gmail", error_message: "Email recipient is missing.", updated_at: now } as never).eq("id", row.id);
+    return "skipped";
+  }
+  if (row.attempt_count >= row.max_attempts) {
+    await supabase.from("order_notifications").update({ status: "failed", error_message: "Max delivery attempts reached.", updated_at: now } as never).eq("id", row.id);
+    return "failed";
+  }
+  if (!(await claim(row))) return "skipped";
+
+  try {
+    const transport = getMailer();
+    if (!transport) throw new Error("Email transport unavailable.");
+    const subject = buildSubjectFromPayload(row.payload, row.channel);
+    const text = buildEmailMessageFromPayload(row.payload, row.channel);
+    const info = await transport.sendMail({
+      from: config.from,
+      to: row.recipient,
+      subject,
+      text,
+    });
+    await markSent(row, "gmail", typeof info.messageId === "string" ? info.messageId : null);
+    return "sent";
+  } catch (error) {
+    return await markFailed(row, safeError(error), "gmail");
+  }
+}
+
+async function markSent(row: NotificationRow, provider: string, providerMessageId: string | null) {
+  const supabase = createAdminClient();
+  await supabase
+    .from("order_notifications")
+    .update({
+      status: "sent",
+      provider,
+      provider_message_id: providerMessageId,
+      attempt_count: row.attempt_count + 1,
+      error_message: null,
+      delivered_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", row.id);
+}
+
+async function markFailed(row: NotificationRow, message: string, provider: string): Promise<"failed"> {
   const supabase = createAdminClient();
   const attemptCount = row.attempt_count + 1;
   const terminal = attemptCount >= row.max_attempts;
@@ -218,23 +327,21 @@ async function markFailed(row: NotificationRow, message: string): Promise<"faile
     .from("order_notifications")
     .update({
       status: "failed",
+      provider,
       attempt_count: attemptCount,
       error_message: message.slice(0, 300),
       next_attempt_at: terminal ? new Date().toISOString() : nextRetryAt(attemptCount),
       updated_at: new Date().toISOString(),
     } as never)
     .eq("id", row.id);
-  console.error("[notifications] sms_send_failed", { notificationId: row.id, attemptCount, terminal, message });
+  console.error("[notifications] send_failed", { notificationId: row.id, channel: row.channel, attemptCount, terminal, message });
   return "failed";
 }
 
-export function buildBusinessPayload(confirmation: OrderConfirmation) {
+function buildPayload(confirmation: OrderConfirmation, event: OrderEvent) {
   const lines = confirmation.items.map((item) => {
-    const extras =
-      item.options.length > 0
-        ? " [" + item.options.map((o) => o.optionName + (o.pricePesewas ? " (" + formatGhs(o.pricePesewas) + ")" : "")).join(", ") + "]"
-        : "";
-    return item.quantity + " x " + item.productName + extras + " - " + formatGhs(item.lineTotalPesewas);
+    const extras = item.options.length > 0 ? " [" + item.options.map((o) => o.optionName).join(", ") + "]" : "";
+    return `${item.quantity} x ${item.productName}${extras} - ${formatGhs(item.lineTotalPesewas)}`;
   });
   const feeStatus =
     confirmation.deliveryFeeStatus === "pending"
@@ -242,53 +349,86 @@ export function buildBusinessPayload(confirmation: OrderConfirmation) {
       : confirmation.deliveryFeeStatus === "not_required"
         ? "Not required"
         : "Confirmed (" + formatGhs(confirmation.deliveryFeePesewas ?? 0) + ")";
-  const message = [
-    "New Eden Bites order " + confirmation.reference,
-    "Time: " + formatDateTime(confirmation.createdAt),
-    "Customer: " + confirmation.customerName,
-    "Phone: " + confirmation.phone,
-    "Fulfilment: " + confirmation.fulfilmentMethod,
+  const title =
+    event === "order_placed" ? "Order placed" :
+    event === "order_out_for_delivery" ? "Order out for delivery" : "Order delivered";
+  const statusText = formatOrderStatus(confirmation.status);
+  const base = [
+    `Eden Bites: ${title}`,
+    `Reference: ${confirmation.reference}`,
+    `Status: ${statusText}`,
+    `Time: ${formatDateTime(confirmation.createdAt)}`,
+    `Customer: ${confirmation.customerName}`,
+    `Phone: ${confirmation.phone}`,
+    confirmation.email ? `Email: ${confirmation.email}` : null,
+    `Fulfilment: ${confirmation.fulfilmentMethod}`,
     confirmation.fulfilmentMethod === "delivery"
-      ? "Address: " + ([confirmation.address, confirmation.area].filter(Boolean).join(", ") || "N/A")
+      ? `Address: ${[confirmation.address, confirmation.area].filter(Boolean).join(", ") || "N/A"}`
       : null,
-    confirmation.directions ? "Directions: " + confirmation.directions : null,
-    "Payment: " + formatPaymentLabel(confirmation.paymentMethod) + " (" + confirmation.paymentStatus + ")",
+    confirmation.directions ? `Directions: ${confirmation.directions}` : null,
+    `Payment: ${formatPaymentMethod(confirmation.paymentMethod)} (${confirmation.paymentStatus})`,
     "Items:",
     ...lines.map((l) => "- " + l),
-    "Food subtotal: " + formatGhs(confirmation.subtotalPesewas),
-    "Delivery fee: " + feeStatus,
-    "Current/final total: " + formatGhs(confirmation.totalPesewas),
-  ]
-    .filter(Boolean)
-    .join("\n");
+    `Food subtotal: ${formatGhs(confirmation.subtotalPesewas)}`,
+    `Delivery fee: ${feeStatus}`,
+    `Total: ${formatGhs(confirmation.totalPesewas)}`,
+  ].filter(Boolean) as string[];
+
+  const businessMessage = base.join("\n");
+  const customerMessage = buildCustomerMessage(confirmation, event);
   return {
-    event: EVENT,
+    event,
+    title,
     reference: confirmation.reference,
-    createdAt: confirmation.createdAt,
-    customer: { name: confirmation.customerName, phone: confirmation.phone },
-    fulfilmentMethod: confirmation.fulfilmentMethod,
-    deliveryAddress:
-      confirmation.fulfilmentMethod === "delivery"
-        ? [confirmation.address, confirmation.area].filter(Boolean).join(", ")
-        : null,
-    items: confirmation.items,
-    subtotalPesewas: confirmation.subtotalPesewas,
-    deliveryFeeStatus: confirmation.deliveryFeeStatus,
-    totalPesewas: confirmation.totalPesewas,
-    message,
+    status: confirmation.status,
+    customer: { name: confirmation.customerName, phone: confirmation.phone, email: confirmation.email },
+    message: businessMessage,
+    sms_business: businessMessage,
+    sms_customer: customerMessage,
+    email_business: businessMessage,
+    email_customer: customerMessage,
+    subject_business: `${title} - ${confirmation.reference}`,
+    subject_customer: `${title} - ${confirmation.reference}`,
   };
 }
 
-function buildMessageFromPayload(payload: Json): string {
-  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    const record = payload as Record<string, unknown>;
-    if (typeof record.message === "string") return record.message;
+function buildCustomerMessage(confirmation: OrderConfirmation, event: OrderEvent): string {
+  const first = confirmation.customerName.split(" ")[0] || "there";
+  if (event === "order_placed") {
+    const feeNote = confirmation.deliveryFeeStatus === "pending" ? " Delivery fee/final amount will be confirmed shortly." : "";
+    return `Hi ${first}, your Eden Bites order ${confirmation.reference} has been placed (${formatOrderStatus(confirmation.status)}). Total: ${formatGhs(confirmation.totalPesewas)}.${feeNote}`;
   }
-  return "New Eden Bites order received.";
+  if (event === "order_out_for_delivery") {
+    return `Hi ${first}, your Eden Bites order ${confirmation.reference} is out for delivery. We will reach you on ${confirmation.phone}.`;
+  }
+  return `Hi ${first}, your Eden Bites order ${confirmation.reference} has been delivered/completed. Thank you for ordering from Eden Bites.`;
 }
 
-function formatPaymentLabel(method: string): string {
-  return method.replace(/_/g, " ");
+function buildSmsMessageFromPayload(payload: Json, channel: Channel): string {
+  if (!isRecord(payload)) return "Eden Bites order update.";
+  if (channel === "sms_customer" && typeof payload.sms_customer === "string") return payload.sms_customer;
+  if (typeof payload.sms_business === "string") return payload.sms_business;
+  if (typeof payload.message === "string") return payload.message;
+  return "Eden Bites order update.";
+}
+
+function buildEmailMessageFromPayload(payload: Json, channel: Channel): string {
+  if (!isRecord(payload)) return "Eden Bites order update.";
+  if (channel === "email_customer" && typeof payload.email_customer === "string") return payload.email_customer;
+  if (typeof payload.email_business === "string") return payload.email_business;
+  if (typeof payload.message === "string") return payload.message;
+  return "Eden Bites order update.";
+}
+
+function buildSubjectFromPayload(payload: Json, channel: Channel): string {
+  if (!isRecord(payload)) return "Eden Bites order update";
+  if (channel === "email_customer" && typeof payload.subject_customer === "string") return payload.subject_customer;
+  if (typeof payload.subject_business === "string") return payload.subject_business;
+  return "Eden Bites order update";
+}
+
+export function buildBusinessPayload(confirmation: OrderConfirmation) {
+  return buildPayload(confirmation, "order_placed");
 }
 
 function nextRetryAt(attemptCount: number): string {
@@ -297,16 +437,20 @@ function nextRetryAt(attemptCount: number): string {
 }
 
 function sanitizeProviderError(data: Record<string, unknown>): string | null {
-  const error = data.error;
-  if (typeof error === "object" && error !== null && !Array.isArray(error)) {
-    const message = (error as Record<string, unknown>).message;
+  const err = data.error ?? data.Error ?? data.message ?? data.Message;
+  if (typeof err === "object" && err !== null && !Array.isArray(err)) {
+    const message = (err as Record<string, unknown>).message;
     return typeof message === "string" ? message.slice(0, 300) : null;
   }
-  if (typeof data.message === "string") return data.message.slice(0, 300);
+  if (typeof err === "string") return err.slice(0, 300);
   return null;
 }
 
 function safeError(error: unknown): string {
   if (error instanceof Error) return error.message.slice(0, 300);
   return "Unknown notification error";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }

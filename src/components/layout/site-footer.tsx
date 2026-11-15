@@ -103,11 +103,6 @@ export async function SiteFooter() {
             <li>Delivery</li>
             <li>Pickup</li>
             <li>Pay on delivery or pickup</li>
-            <li>
-              <Link href="/admin/login" className="transition-colors hover:text-white">
-                Staff sign in
-              </Link>
-            </li>
           </ul>
         </div>
 

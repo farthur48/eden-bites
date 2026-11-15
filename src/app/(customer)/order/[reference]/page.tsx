@@ -6,7 +6,7 @@ import { CheckCircle2, MessageCircle } from "lucide-react";
 import { Container } from "@/components/layout/container";
 import { buttonStyles } from "@/components/ui/button";
 import { getPublicBusinessProfile } from "@/lib/data/settings";
-import { formatDateTime, formatGhs, formatPaymentMethod, formatPaymentStatus } from "@/lib/format";
+import { formatDateTime, formatGhs, formatOrderStatus, formatPaymentMethod, formatPaymentStatus } from "@/lib/format";
 import { getOrderConfirmation } from "@/lib/orders/service";
 import { smsHref } from "@/lib/site-config";
 
@@ -54,13 +54,20 @@ export default async function OrderConfirmationPage({
 
           <div className="mt-10 overflow-hidden rounded-[1.5rem] border border-border/80 bg-white">
             <div className="border-b border-border/70 bg-brand-cream/40 px-6 py-5 sm:px-8">
-              <p className="text-[0.65rem] font-bold uppercase tracking-[0.18em] text-brand-green/55">
-                Order reference
-              </p>
-              <p className="mt-1 font-display text-2xl font-extrabold tracking-tight text-brand-green-deep">
-                {order.reference}
-              </p>
-              <p className="mt-1 text-xs text-muted">{formatDateTime(order.createdAt)}</p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[0.65rem] font-bold uppercase tracking-[0.18em] text-brand-green/55">
+                    Order reference
+                  </p>
+                  <p className="mt-1 font-display text-2xl font-extrabold tracking-tight text-brand-green-deep">
+                    {order.reference}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">{formatDateTime(order.createdAt)}</p>
+                </div>
+                <span className="inline-flex rounded-full bg-brand-lime px-3 py-1 text-xs font-bold text-brand-black">
+                  {formatOrderStatus(order.status)}
+                </span>
+              </div>
             </div>
 
             <div className="px-6 py-6 sm:px-8 sm:py-7">

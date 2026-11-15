@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireAdmin } from "@/lib/auth";
+import { dispatchPendingNotifications, enqueueOrderStatusNotifications } from "@/lib/notifications/service";
+import { getOrderConfirmation } from "@/lib/orders/service";
 import { createClient } from "@/lib/supabase/server";
 import type { OrderStatus, PaymentStatus } from "@/types/database";
 
-const statuses: OrderStatus[] = ["new", "preparing", "completed", "cancelled"];
+const statuses: OrderStatus[] = ["new", "preparing", "out_for_delivery", "completed", "cancelled"];
 
 export async function updateOrderStatusAction(formData: FormData) {
   await requireAdmin();
@@ -51,6 +53,27 @@ export async function updateOrderStatusAction(formData: FormData) {
     .update({ status: status as OrderStatus, payment_status: nextPaymentStatus })
     .eq("id", id);
 
+  if (!error && (status === "out_for_delivery" || status === "completed")) {
+    try {
+      const { data: refRow } = await supabase.from("orders").select("reference").eq("id", id).maybeSingle();
+      if (refRow?.reference) {
+        const confirmation = await getOrderConfirmation(refRow.reference);
+        if (confirmation) {
+          await enqueueOrderStatusNotifications({
+            orderId: id,
+            confirmation,
+            event: status === "out_for_delivery" ? "order_out_for_delivery" : "order_delivered",
+          });
+          void dispatchPendingNotifications({ orderId: id, limit: 10 }).catch((err) => {
+            console.error("[notifications] dispatch_after_status_failed", { orderId: id, status, error: String(err) });
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[notifications] status_trigger_failed", { orderId: id, status, error: String(err) });
+    }
+  }
+
   revalidatePath("/admin");
   revalidatePath("/admin/orders");
   revalidatePath(`/admin/orders/${id}`);
@@ -61,8 +84,9 @@ export async function updateOrderStatusAction(formData: FormData) {
 function isAllowedStatusTransition(from: OrderStatus, to: OrderStatus): boolean {
   if (from === to) return true;
   const allowed: Record<OrderStatus, OrderStatus[]> = {
-    new: ["preparing", "completed", "cancelled"],
-    preparing: ["completed", "cancelled"],
+    new: ["preparing", "out_for_delivery", "completed", "cancelled"],
+    preparing: ["out_for_delivery", "completed", "cancelled"],
+    out_for_delivery: ["completed", "cancelled"],
     completed: [],
     cancelled: [],
   };

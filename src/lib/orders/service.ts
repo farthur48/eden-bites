@@ -20,7 +20,7 @@ import type {
 } from "@/lib/orders/types";
 import { getStoreAvailability } from "@/lib/store/availability";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { dispatchPendingNotifications, enqueueOrderNotifications } from "@/lib/notifications/service";
+import { dispatchPendingNotifications, enqueueOrderPlacedNotifications } from "@/lib/notifications/service";
 import type { Json, OrderItem } from "@/types/database";
 
 const MAX_ITEMS = 25;
@@ -369,10 +369,10 @@ async function triggerOrderNotifications(
 ): Promise<void> {
   if (!isLiveOrderingEnabled() || confirmation.mode !== "live" || !orderId) return;
   try {
-    await enqueueOrderNotifications({ orderId, confirmation });
+    await enqueueOrderPlacedNotifications({ orderId, confirmation });
     // Attempt delivery once on create path (or for duplicate lookups to catch pending retries)
     // without blocking the order result; failures remain tracked for retry endpoint/cron.
-    void dispatchPendingNotifications({ orderId, limit: 5 }).catch((error) => {
+    void dispatchPendingNotifications({ orderId, limit: 10 }).catch((error) => {
       console.error("[notifications] dispatch_after_order_failed", { orderId, isDuplicate, error: String(error) });
     });
   } catch (error) {

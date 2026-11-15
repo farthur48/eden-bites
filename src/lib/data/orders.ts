@@ -31,6 +31,7 @@ export type OrderStats = {
   total: number;
   newOrders: number;
   preparing: number;
+  outForDelivery: number;
   completed: number;
   cancelled: number;
   pendingDeliveryFees: number;
@@ -43,6 +44,7 @@ const emptyStats: OrderStats = {
   total: 0,
   newOrders: 0,
   preparing: 0,
+  outForDelivery: 0,
   completed: 0,
   cancelled: 0,
   pendingDeliveryFees: 0,
@@ -65,7 +67,7 @@ export async function getOrderStats(): Promise<OrderStats> {
         .select("id", { count: "exact", head: true })
         .eq("fulfilment_method", "delivery")
         .eq("delivery_fee_status", "pending")
-        .in("status", ["new", "preparing"]),
+        .in("status", ["new", "preparing", "out_for_delivery"]),
       supabase
         .from("orders")
         .select("id", { count: "exact", head: true })
@@ -85,6 +87,7 @@ export async function getOrderStats(): Promise<OrderStats> {
     const counts: Record<OrderStatus, number> = {
       new: 0,
       preparing: 0,
+      out_for_delivery: 0,
       completed: 0,
       cancelled: 0,
     };
@@ -102,6 +105,7 @@ export async function getOrderStats(): Promise<OrderStats> {
       total: (ordersResult.data ?? []).length,
       newOrders: counts.new,
       preparing: counts.preparing,
+      outForDelivery: counts.out_for_delivery,
       completed: counts.completed,
       cancelled: counts.cancelled,
       pendingDeliveryFees: feesResult.count ?? 0,

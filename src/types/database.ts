@@ -235,7 +235,7 @@ export type Database = {
           delivery_area: string | null;
           delivery_directions: string | null;
           notes: string | null;
-          status: "new" | "preparing" | "completed" | "cancelled";
+          status: "new" | "preparing" | "out_for_delivery" | "completed" | "cancelled";
           payment_method: "cash_on_delivery" | "cash_on_pickup" | "momo_on_delivery" | "momo_on_pickup";
           payment_status: "pending" | "paid" | "failed" | "cancelled";
           subtotal_pesewas: number;
@@ -259,7 +259,7 @@ export type Database = {
           delivery_area?: string | null;
           delivery_directions?: string | null;
           notes?: string | null;
-          status?: "new" | "preparing" | "completed" | "cancelled";
+          status?: "new" | "preparing" | "out_for_delivery" | "completed" | "cancelled";
           payment_method: "cash_on_delivery" | "cash_on_pickup" | "momo_on_delivery" | "momo_on_pickup";
           payment_status?: "pending" | "paid" | "failed" | "cancelled";
           subtotal_pesewas: number;
@@ -283,7 +283,7 @@ export type Database = {
           delivery_area?: string | null;
           delivery_directions?: string | null;
           notes?: string | null;
-          status?: "new" | "preparing" | "completed" | "cancelled";
+          status?: "new" | "preparing" | "out_for_delivery" | "completed" | "cancelled";
           payment_method?: "cash_on_delivery" | "cash_on_pickup" | "momo_on_delivery" | "momo_on_pickup";
           payment_status?: "pending" | "paid" | "failed" | "cancelled";
           subtotal_pesewas?: number;
@@ -373,7 +373,7 @@ export type Database = {
         Row: {
           id: string;
           order_id: string;
-          channel: "dashboard" | "sms_business" | "sms_customer";
+          channel: "dashboard" | "sms_business" | "sms_customer" | "email_business" | "email_customer";
           event: string;
           status: "pending" | "processing" | "sent" | "failed" | "skipped";
           recipient: string | null;
@@ -392,7 +392,7 @@ export type Database = {
         Insert: {
           id?: string;
           order_id: string;
-          channel: "dashboard" | "sms_business" | "sms_customer";
+          channel: "dashboard" | "sms_business" | "sms_customer" | "email_business" | "email_customer";
           event?: string;
           status?: "pending" | "processing" | "sent" | "failed" | "skipped";
           recipient?: string | null;
@@ -411,7 +411,7 @@ export type Database = {
         Update: {
           id?: string;
           order_id?: string;
-          channel?: "dashboard" | "sms_business" | "sms_customer";
+          channel?: "dashboard" | "sms_business" | "sms_customer" | "email_business" | "email_customer";
           event?: string;
           status?: "pending" | "processing" | "sent" | "failed" | "skipped";
           recipient?: string | null;

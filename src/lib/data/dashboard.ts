@@ -23,6 +23,7 @@ const emptySummary: DashboardSummary = {
     total: 0,
     newOrders: 0,
     preparing: 0,
+    outForDelivery: 0,
     completed: 0,
     cancelled: 0,
     pendingDeliveryFees: 0,

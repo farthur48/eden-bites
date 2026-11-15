@@ -493,12 +493,13 @@ export function MenuForm({ product }: { product?: MenuEditorProduct }) {
 
             <label className="mt-4 block">
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-green/60">
-                Upload image
+                Upload image {product ? "(optional to replace)" : "(required)"}
               </span>
               <input
                 type="file"
                 name="image"
                 accept="image/jpeg,image/png,image/webp,image/avif"
+                required={!product}
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   setSelectedFileName(file ? file.name : null);
@@ -511,20 +512,10 @@ export function MenuForm({ product }: { product?: MenuEditorProduct }) {
                 {selectedFileName} selected — the preview updates after saving.
               </p>
             ) : null}
-
-            <div className="mt-4">
-              <Input
-                label="Or use an image URL"
-                value={imageUrl}
-                onChange={setImageUrl}
-                placeholder="/menu/meal.jpg or Supabase storage URL"
-              />
-              <p className="mt-1 text-[0.65rem] leading-relaxed text-muted">
-                Remote images must come from Supabase Storage. Uploading is
-                recommended.
-              </p>
-              <input type="hidden" name="imageUrl" value={imageUrl} />
-            </div>
+            <p className="mt-2 text-[0.65rem] leading-relaxed text-muted">
+              Upload an actual image file (stored in Supabase). Image URL links are not accepted.
+            </p>
+            <input type="hidden" name="imageUrl" value={product?.image_url ?? imageUrl} />
 
             <div className="mt-4">
               <Input

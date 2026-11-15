@@ -1,6 +1,6 @@
 export type FulfilmentMethod = "delivery" | "pickup";
 
-export type OrderStatus = "new" | "preparing" | "completed" | "cancelled";
+export type OrderStatus = "new" | "preparing" | "out_for_delivery" | "completed" | "cancelled";
 
 export type DeliveryFeeStatus = "pending" | "confirmed" | "not_required";
 

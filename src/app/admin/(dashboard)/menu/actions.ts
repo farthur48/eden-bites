@@ -56,12 +56,8 @@ export async function saveMenuProductAction(
 
   let imageUrl = readText(formData.get("imageUrl"), 1000);
 
-  if (imageUrl && !isAllowedImageUrl(imageUrl)) {
-    return {
-      status: "error",
-      message:
-        "Use a local image path or a Supabase Storage URL, or upload an image.",
-    };
+  if (imageUrl && !/^https:\/\/([a-z0-9-]+\.)?supabase\.co\/storage\/v1\/object\/public\//i.test(imageUrl)) {
+    imageUrl = "";
   }
 
   const image = formData.get("image");
@@ -76,6 +72,13 @@ export async function saveMenuProductAction(
     imageUrl = upload.url;
   }
 
+  if (!imageUrl) {
+    return {
+      status: "error",
+      message: "Upload a meal image. URL links are not accepted.",
+    };
+  }
+
   const nameForSlug = readText(formData.get("slug"), 120) || name;
   const input: MenuProductInput = {
     id,
@@ -84,7 +87,7 @@ export async function saveMenuProductAction(
     tagline: readText(formData.get("tagline"), 200),
     description,
     pricePesewas: price,
-    imageUrl: imageUrl || "/menu/placeholder.svg",
+    imageUrl,
     imageAlt: readText(formData.get("imageAlt"), 200) || `${name} from Eden Bites`,
     isActive: formData.get("isActive") === "on",
     isFeatured: formData.get("isFeatured") === "on",

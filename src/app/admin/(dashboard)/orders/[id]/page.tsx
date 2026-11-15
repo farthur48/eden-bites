@@ -32,6 +32,8 @@ function statusVariant(status: OrderStatus): BadgeVariant {
       return "danger";
     case "new":
       return "warning";
+    case "out_for_delivery":
+      return "lime";
     default:
       return "default";
   }
@@ -263,6 +265,7 @@ export default async function AdminOrderDetailPage({
                 >
                   <option value="new">New</option>
                   <option value="preparing">Preparing</option>
+                  <option value="out_for_delivery">Out for delivery</option>
                   <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
                 </select>
