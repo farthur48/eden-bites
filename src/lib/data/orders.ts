@@ -8,6 +8,7 @@ export type AdminOrderListItem = Pick<
   Order,
   | "id"
   | "reference"
+  | "order_number"
   | "customer_name"
   | "customer_phone"
   | "status"
@@ -147,7 +148,7 @@ export async function getRecentOrders(
     const { data, error } = await supabase
       .from("orders")
       .select(
-        "id, reference, customer_name, customer_phone, status, fulfilment_method, payment_method, payment_status, delivery_fee_status, delivery_fee_pesewas, subtotal_pesewas, total_pesewas, created_at",
+        "id, reference, order_number, customer_name, customer_phone, status, fulfilment_method, payment_method, payment_status, delivery_fee_status, delivery_fee_pesewas, subtotal_pesewas, total_pesewas, created_at",
       )
       .order("created_at", { ascending: false })
       .limit(limit);
@@ -181,7 +182,7 @@ export async function getOrders({
     let builder = supabase
       .from("orders")
       .select(
-        "id, reference, customer_name, customer_phone, status, fulfilment_method, payment_method, payment_status, delivery_fee_status, delivery_fee_pesewas, subtotal_pesewas, total_pesewas, created_at",
+        "id, reference, order_number, customer_name, customer_phone, status, fulfilment_method, payment_method, payment_status, delivery_fee_status, delivery_fee_pesewas, subtotal_pesewas, total_pesewas, created_at",
       )
       .order("created_at", { ascending: false })
       .limit(100);
@@ -194,7 +195,7 @@ export async function getOrders({
 
     if (term) {
       builder = builder.or(
-        `reference.ilike.%${term}%,customer_name.ilike.%${term}%`,
+        `reference.ilike.%${term}%,order_number.ilike.%${term}%,customer_name.ilike.%${term}%`,
       );
     }
 

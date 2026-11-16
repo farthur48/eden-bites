@@ -83,6 +83,7 @@ export async function createOrder(
   if (!isLiveOrderingEnabled()) {
     const confirmation: OrderConfirmation = {
       reference,
+      orderNumber: reference,
       customerName: input.customerName,
       phone: input.phone,
       email: input.email,
@@ -390,6 +391,7 @@ function toConfirmation(
     (fulfilmentMethod === "pickup" ? "not_required" : "pending");
   return {
     reference: String(order.reference ?? ""),
+    orderNumber: (order.order_number as string | null) ?? null,
     customerName: String(order.customer_name ?? ""),
     phone: String(order.customer_phone ?? ""),
     email: (order.customer_email as string | null) ?? null,

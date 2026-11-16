@@ -1,13 +1,12 @@
 "use client";
 
-"use client";
-
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 
 import { buttonStyles } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/", label: "Home" },
@@ -16,7 +15,13 @@ const links = [
   { href: "/#contact", label: "Contact" },
 ];
 
-export function MobileNav() {
+export function MobileNav({
+  storeLabel,
+  isStoreOpen,
+}: {
+  storeLabel?: string;
+  isStoreOpen?: boolean;
+}) {
   const pathname = usePathname();
   const [openPathname, setOpenPathname] = useState<string | null>(null);
   const open = openPathname === pathname;
@@ -61,10 +66,24 @@ export function MobileNav() {
             className="fixed inset-x-0 top-[4.5rem] z-50 border-b border-border bg-white px-5 py-5 shadow-lg sm:px-8"
           >
             <nav className="mx-auto flex max-w-7xl flex-col">
+              {storeLabel ? (
+                <p
+                  className={cn(
+                    "mb-3 inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-[0.14em]",
+                    isStoreOpen
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-amber-200 bg-amber-50 text-amber-800",
+                  )}
+                >
+                  <span className={cn("size-1.5 rounded-full", isStoreOpen ? "bg-emerald-500" : "bg-amber-500")} />
+                  {storeLabel}
+                </p>
+              ) : null}
               {links.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
+                  onClick={() => setOpenPathname(null)}
                   className="rounded-xl px-3 py-3.5 text-base font-medium text-brand-green-deep/85 transition-colors hover:bg-brand-cream hover:text-brand-green-deep"
                 >
                   {link.label}
@@ -72,11 +91,8 @@ export function MobileNav() {
               ))}
               <Link
                 href="/menu"
-                className={buttonStyles({
-                  variant: "accent",
-                  size: "lg",
-                  className: "mt-4 w-full",
-                })}
+                onClick={() => setOpenPathname(null)}
+                className={buttonStyles({ variant: "accent", size: "lg", className: "mt-4 w-full" })}
               >
                 Order Now
               </Link>

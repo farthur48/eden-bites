@@ -74,12 +74,19 @@ export default async function AdminOrdersPage({
             Review, confirm, and manage customer orders.
           </p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/orders?status=new" className={buttonStyles({ variant: status === "new" && !pendingFeesOnly ? "accent" : "outline", size: "sm" })}>New ({stats.newOrders})</Link>
+          <Link href="/admin/orders?fees=pending" className={buttonStyles({ variant: pendingFeesOnly ? "accent" : "outline", size: "sm" })}>Pending fees ({stats.pendingDeliveryFees})</Link>
+        </div>
       </div>
+      {pendingFeesOnly ? (
+        <p className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-medium text-orange-900">Showing delivery orders with unconfirmed delivery fees.</p>
+      ) : null}
 
       <form
         action="/admin/orders"
         method="get"
-        className="flex flex-col gap-3 rounded-[1.25rem] border border-border/70 bg-white p-4 sm:flex-row sm:items-center"
+        className="sticky top-16 z-10 flex flex-col gap-3 rounded-[1.25rem] border border-border/70 bg-white/95 p-4 backdrop-blur sm:static sm:flex-row sm:items-center"
       >
         <input type="hidden" name="status" value={status} />
         <label className="relative flex-1">
@@ -89,7 +96,7 @@ export default async function AdminOrdersPage({
             type="search"
             name="q"
             defaultValue={query}
-            placeholder="Search by order ID or customer name"
+            placeholder="Search reference or name"
             className="h-11 w-full rounded-xl border border-border bg-white pl-11 pr-4 text-sm text-foreground placeholder:text-muted/60 focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/10"
           />
         </label>
@@ -98,7 +105,19 @@ export default async function AdminOrdersPage({
         </button>
       </form>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <Link
+          href="/admin/orders?fees=pending"
+          className={cn(
+            "inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors",
+            pendingFeesOnly ? "bg-brand-green-deep text-white" : "border border-border/70 bg-white text-muted hover:text-brand-green-deep",
+          )}
+        >
+          Pending fees
+          <span className={cn("rounded-full px-1.5 py-0.5 text-[0.65rem] font-bold", pendingFeesOnly ? "bg-brand-lime text-brand-black" : "bg-brand-cream text-brand-green-deep")}>
+            {stats.pendingDeliveryFees}
+          </span>
+        </Link>
         {filters.map((filter) => {
           const active = !pendingFeesOnly && status === filter.value;
           const count =
@@ -118,7 +137,7 @@ export default async function AdminOrdersPage({
               key={filter.value}
               href={buildHref(filter.value, query)}
               className={cn(
-                "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors",
+                "inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors",
                 active
                   ? "bg-brand-green-deep text-white"
                   : "border border-border/70 bg-white text-muted hover:text-brand-green-deep",
@@ -151,12 +170,15 @@ export default async function AdminOrdersPage({
       {result.status === "ready" && orders.length === 0 ? (
         <EmptyState
           eyebrow="Orders"
-          title={query ? "No matching orders" : "No orders yet"}
+          title={query ? "No matching orders" : pendingFeesOnly ? "No pending delivery fees" : "No orders yet"}
           description={
             query
               ? `Nothing matched "${query}". Try a different search.`
-              : "New customer orders will appear here."
+              : pendingFeesOnly
+                ? "All delivery fees are confirmed for active orders."
+                : "New customer orders will appear here."
           }
+          action={pendingFeesOnly ? <Link href="/admin/orders" className={buttonStyles({ variant: "outline", size: "sm" })}>View all orders</Link> : undefined}
         />
       ) : null}
 
@@ -166,7 +188,7 @@ export default async function AdminOrdersPage({
             <table className="w-full min-w-[820px] text-left text-sm">
               <thead className="bg-brand-cream/50 text-[0.68rem] uppercase tracking-[0.14em] text-muted">
                 <tr>
-                  <th className="px-6 py-3.5 font-semibold">Order ID</th>
+                  <th className="px-6 py-3.5 font-semibold">Order</th>
                   <th className="px-6 py-3.5 font-semibold">Customer</th>
                   <th className="px-6 py-3.5 font-semibold">Date</th>
                   <th className="px-6 py-3.5 font-semibold">Fulfilment</th>
@@ -178,8 +200,9 @@ export default async function AdminOrdersPage({
               <tbody className="divide-y divide-border/70">
                 {orders.map((order) => (
                   <tr key={order.id} className="transition-colors hover:bg-brand-cream/20">
-                    <td className="px-6 py-4 font-mono text-xs font-semibold text-brand-green-deep">
-                      {order.reference}
+                    <td className="px-6 py-4">
+                      <p className="font-mono text-xs font-semibold text-brand-green-deep">{order.order_number || order.reference}</p>
+                      {order.order_number && order.order_number !== order.reference ? <p className="mt-0.5 text-[0.65rem] text-muted">Ref: {order.reference}</p> : null}
                     </td>
                     <td className="px-6 py-4">
                       <p className="font-medium text-foreground">{order.customer_name}</p>
@@ -207,20 +230,20 @@ export default async function AdminOrdersPage({
           <ul className="divide-y divide-border/70 md:hidden">
             {orders.map((order) => (
               <li key={order.id} className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-mono text-xs font-semibold text-brand-green-deep">{order.reference}</p>
-                    <p className="mt-1 font-semibold text-foreground">{order.customer_name}</p>
-                    <p className="mt-0.5 text-xs capitalize text-muted">{order.fulfilment_method} · {formatDateTime(order.created_at)}</p>
+                <Link href={`/admin/orders/${order.id}`} className="block rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-green/20">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-[0.7rem] font-semibold text-brand-green-deep">{order.order_number || order.reference}</p>
+                      <p className="mt-1 truncate font-semibold text-foreground">{order.customer_name}</p>
+                      <p className="mt-0.5 text-xs capitalize text-muted">{order.fulfilment_method} · {formatDateTime(order.created_at)}</p>
+                    </div>
+                    <Badge variant={statusVariant(order.status)}>{formatOrderStatus(order.status)}</Badge>
                   </div>
-                  <Badge variant={statusVariant(order.status)}>{formatOrderStatus(order.status)}</Badge>
-                </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <p className="font-semibold text-brand-green-deep">{formatGhs(order.total_pesewas)}</p>
-                  <Link href={`/admin/orders/${order.id}`} className="text-sm font-semibold text-brand-green-deep underline decoration-brand-lime decoration-2 underline-offset-4">
-                    View details
-                  </Link>
-                </div>
+                  <div className="mt-3 flex items-center justify-between">
+                    <p className="font-display text-lg font-extrabold text-brand-green-deep">{formatGhs(order.total_pesewas)}</p>
+                    <span className="text-sm font-semibold text-brand-green-deep underline decoration-brand-lime decoration-2 underline-offset-4">Open</span>
+                  </div>
+                </Link>
               </li>
             ))}
           </ul>

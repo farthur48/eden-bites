@@ -56,6 +56,7 @@ export default async function AdminOrderDetailPage({
   const isDelivery = order.fulfilment_method === "delivery";
   const feePending = isDelivery && order.delivery_fee_status === "pending";
   const customerMessage = buildCustomerMessage(order);
+  const nextStatuses = getNextStatuses(order.status, isDelivery, feePending);
 
   return (
     <div className="space-y-6">
@@ -65,8 +66,9 @@ export default async function AdminOrderDetailPage({
             <ArrowLeft className="size-4" /> Back to orders
           </Link>
           <h1 className="mt-3 font-display text-3xl font-extrabold tracking-[-0.035em] text-brand-green-deep">
-            {order.reference}
+            {order.order_number || order.reference}
           </h1>
+          {order.order_number && order.order_number !== order.reference ? <p className="mt-1 text-xs text-muted">Ref: {order.reference}</p> : null}
           <p className="mt-1 text-sm text-muted">Placed {formatDateTime(order.created_at)}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -97,10 +99,36 @@ export default async function AdminOrderDetailPage({
         </p>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="space-y-5">
-          <section className="rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
-            <h2 className="font-display text-xl font-bold text-brand-green-deep">Customer Information</h2>
+      {nextStatuses.length > 0 ? (
+        <section className="sticky top-16 z-10 -mx-1 rounded-[1.25rem] border border-border/70 bg-white/95 p-4 shadow-sm backdrop-blur sm:static sm:mx-0 sm:p-5">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-green/55">Quick status update</p>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            {nextStatuses.map((status) => (
+              <form key={status} action={updateOrderStatusAction}>
+                <input type="hidden" name="orderId" value={order.id} />
+                <input type="hidden" name="status" value={status} />
+                <button
+                  type="submit"
+                  disabled={status === "completed" && feePending}
+                  className={buttonStyles({
+                    variant: status === "cancelled" ? "outline" : status === "completed" ? "accent" : "primary",
+                    size: "sm",
+                    className: "w-full sm:w-auto",
+                  })}
+                >
+                  {status === "out_for_delivery" ? "Out for delivery" : status === "completed" ? "Completed" : formatOrderStatus(status)}
+                </button>
+              </form>
+            ))}
+          </div>
+          {feePending ? <p className="mt-2 text-xs text-amber-800">Confirm delivery fee before marking completed.</p> : null}
+        </section>
+      ) : null}
+
+      <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="space-y-4">
+          <details open className="group rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
+            <summary className="cursor-pointer list-none font-display text-xl font-bold text-brand-green-deep">Customer Information</summary>
             <dl className="mt-4 grid gap-4 sm:grid-cols-2">
               <div>
                 <dt className="text-[0.65rem] font-bold uppercase tracking-[0.16em] text-brand-green/50">Name</dt>
@@ -125,12 +153,12 @@ export default async function AdminOrderDetailPage({
                 </a>
               ) : null}
             </div>
-          </section>
+          </details>
 
-          <section className="overflow-hidden rounded-[1.25rem] border border-border/70 bg-white">
-            <div className="border-b border-border/70 px-5 py-4 sm:px-6">
-              <h2 className="font-display text-xl font-bold text-brand-green-deep">Meal Information</h2>
-            </div>
+          <details open className="overflow-hidden rounded-[1.25rem] border border-border/70 bg-white">
+            <summary className="cursor-pointer list-none border-b border-border/70 px-5 py-4 font-display text-xl font-bold text-brand-green-deep sm:px-6">
+              Meal Information
+            </summary>
             <ul className="divide-y divide-border/70">
               {items.map((item) => (
                 <li key={item.id} className="flex items-start justify-between gap-4 px-5 py-4 sm:px-6">
@@ -146,10 +174,10 @@ export default async function AdminOrderDetailPage({
                 </li>
               ))}
             </ul>
-          </section>
+          </details>
 
-          <section className="rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
-            <h2 className="font-display text-xl font-bold text-brand-green-deep">Fulfilment Details</h2>
+          <details className="rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
+            <summary className="cursor-pointer list-none font-display text-xl font-bold text-brand-green-deep">Fulfilment Details</summary>
             <div className="mt-4 rounded-xl bg-brand-cream/50 p-4 text-sm">
               <p className="font-semibold capitalize text-brand-green-deep">{order.fulfilment_method}</p>
               {isDelivery ? (
@@ -168,12 +196,12 @@ export default async function AdminOrderDetailPage({
                 <p className="mt-1 text-sm text-foreground">{order.notes}</p>
               </div>
             ) : null}
-          </section>
+          </details>
         </div>
 
-        <div className="space-y-5">
-          <section className="rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
-            <h2 className="font-display text-xl font-bold text-brand-green-deep">Payment Information</h2>
+        <div className="space-y-4">
+          <details open className="rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
+            <summary className="cursor-pointer list-none font-display text-xl font-bold text-brand-green-deep">Payment Information</summary>
             <dl className="mt-4 space-y-3 text-sm">
               <div className="flex items-center justify-between gap-4">
                 <dt className="text-muted">Payment method</dt>
@@ -217,14 +245,14 @@ export default async function AdminOrderDetailPage({
                 Save payment status
               </button>
             </form>
-          </section>
+          </details>
 
           {isDelivery ? (
-            <section className="rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="font-display text-xl font-bold text-brand-green-deep">Delivery Fee Management</h2>
+            <details open className="rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-display text-xl font-bold text-brand-green-deep">
+                <span>Delivery Fee</span>
                 {feePending ? <Badge variant="warning">Pending</Badge> : <Badge variant="success">Confirmed</Badge>}
-              </div>
+              </summary>
               <form action={updateDeliveryFeeAction} className="mt-4 space-y-3">
                 <input type="hidden" name="orderId" value={order.id} />
                 <label className="block">
@@ -249,11 +277,11 @@ export default async function AdminOrderDetailPage({
                   <button type="submit" className="w-full rounded-xl px-4 py-2 text-xs font-medium text-muted hover:bg-brand-cream hover:text-brand-green-deep">Reset to pending</button>
                 </ConfirmForm>
               ) : null}
-            </section>
+            </details>
           ) : null}
 
-          <section className="rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
-            <h2 className="font-display text-xl font-bold text-brand-green-deep">Order Status</h2>
+          <details className="rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
+            <summary className="cursor-pointer list-none font-display text-xl font-bold text-brand-green-deep">All status options</summary>
             <form action={updateOrderStatusAction} className="mt-4 space-y-3">
               <input type="hidden" name="orderId" value={order.id} />
               <label className="block">
@@ -274,7 +302,7 @@ export default async function AdminOrderDetailPage({
                 Update status
               </button>
             </form>
-          </section>
+          </details>
         </div>
       </div>
     </div>
@@ -291,6 +319,17 @@ function formatOptions(value: Json): string {
     })
     .filter((name): name is string => Boolean(name));
   return names.length > 0 ? names.join(", ") : "Standard preparation";
+}
+
+function getNextStatuses(status: OrderStatus, isDelivery: boolean, feePending: boolean): OrderStatus[] {
+  const map: Record<OrderStatus, OrderStatus[]> = {
+    new: ["preparing", "out_for_delivery", "completed", "cancelled"],
+    preparing: ["out_for_delivery", "completed", "cancelled"],
+    out_for_delivery: ["completed", "cancelled"],
+    completed: [],
+    cancelled: [],
+  };
+  return map[status].filter((s) => !(s === "completed" && isDelivery && feePending));
 }
 
 function buildCustomerMessage(order: { customer_name: string; reference: string; fulfilment_method: string; subtotal_pesewas: number; delivery_fee_status: string; delivery_fee_pesewas: number; total_pesewas: number }): string {

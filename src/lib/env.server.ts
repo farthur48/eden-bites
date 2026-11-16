@@ -48,9 +48,12 @@ export function getSmsServerConfig(): SmsServerConfig | null {
 }
 
 export type EmailServerConfig = {
-  provider: "gmail";
+  provider: "smtp";
+  host: string;
+  port: number;
+  secure: boolean;
   user: string;
-  appPassword: string;
+  pass: string;
   from: string;
   businessTo: string;
   enabled: boolean;
@@ -58,12 +61,16 @@ export type EmailServerConfig = {
 
 export function getEmailServerConfig(): EmailServerConfig | null {
   const enabled = process.env.EMAIL_NOTIFICATIONS_ENABLED?.trim().toLowerCase() === "true";
-  const user = process.env.GMAIL_USER?.trim() ?? "";
-  const appPassword = process.env.GMAIL_APP_PASSWORD?.trim() ?? "";
+  const user = process.env.SMTP_USER?.trim() || process.env.GMAIL_USER?.trim() || "";
+  const pass = process.env.SMTP_PASSWORD?.trim() || process.env.GMAIL_APP_PASSWORD?.trim() || "";
   const from = process.env.EMAIL_FROM?.trim() || user;
   const businessTo = process.env.EMAIL_BUSINESS_TO?.trim() || user;
-  if (!enabled || !user || !appPassword || !businessTo) return null;
-  return { provider: "gmail", user, appPassword, from, businessTo, enabled };
+  const host = process.env.SMTP_HOST?.trim() || (process.env.GMAIL_USER ? "smtp.gmail.com" : "");
+  const port = Number(process.env.SMTP_PORT?.trim() || (host === "smtp.gmail.com" ? "465" : "587")) || 587;
+  const secureRaw = process.env.SMTP_SECURE?.trim().toLowerCase();
+  const secure = secureRaw ? secureRaw === "true" : port === 465;
+  if (!enabled || !host || !user || !pass || !businessTo) return null;
+  return { provider: "smtp", host, port, secure, user, pass, from, businessTo, enabled };
 }
 
 export function getNotificationRetrySecret(): string | null {

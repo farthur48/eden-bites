@@ -39,6 +39,7 @@ export type PricedOrderItem = {
 
 export type OrderConfirmation = {
   reference: string;
+  orderNumber: string | null;
   customerName: string;
   phone: string;
   email: string | null;

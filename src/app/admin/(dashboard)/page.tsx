@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CheckCircle2, Clock3, ShoppingBag, TrendingUp, ArrowRight, Store, Banknote } from "lucide-react";
+import { CheckCircle2, Clock3, ShoppingBag, TrendingUp, ArrowRight, Store, Banknote, AlertTriangle } from "lucide-react";
 
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { buttonStyles } from "@/components/ui/button";
@@ -55,9 +55,11 @@ export default async function AdminOverviewPage({
           </h1>
           <p className="mt-1 text-sm text-muted">Welcome back. Here&apos;s what&apos;s happening with Eden Bites today.</p>
         </div>
-        <Link href="/admin/orders?status=new" className={buttonStyles({ variant: "accent", size: "sm" })}>
-          View new orders
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/orders?status=new" className={buttonStyles({ variant: "accent", size: "sm" })}>New orders</Link>
+          <Link href="/admin/orders?status=preparing" className={buttonStyles({ variant: "outline", size: "sm" })}>Preparing</Link>
+          <Link href="/admin/orders?fees=pending" className={buttonStyles({ variant: "outline", size: "sm" })}>Pending fees</Link>
+        </div>
       </div>
 
       {summary.status === "setup" ? (
@@ -88,6 +90,23 @@ export default async function AdminOverviewPage({
 
       {summary.status === "ready" ? (
         <>
+          {summary.stats.pendingDeliveryFees > 0 || summary.stats.newOrders > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {summary.stats.newOrders > 0 ? (
+                <Link href="/admin/orders?status=new" className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 transition-colors hover:bg-amber-100/70">
+                  <AlertTriangle className="size-5 shrink-0" />
+                  <div><p className="text-sm font-semibold">{summary.stats.newOrders} new order{summary.stats.newOrders === 1 ? "" : "s"} need review</p><p className="text-xs opacity-80">Confirm and move to preparing</p></div>
+                </Link>
+              ) : null}
+              {summary.stats.pendingDeliveryFees > 0 ? (
+                <Link href="/admin/orders?fees=pending" className="flex items-center gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-orange-900 transition-colors hover:bg-orange-100/70">
+                  <Clock3 className="size-5 shrink-0" />
+                  <div><p className="text-sm font-semibold">{summary.stats.pendingDeliveryFees} delivery fee{summary.stats.pendingDeliveryFees === 1 ? "" : "s"} pending</p><p className="text-xs opacity-80">Confirm fees before completion</p></div>
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <div className="rounded-[1.25rem] border border-border/70 bg-white p-5 sm:p-6">
               <div className="flex items-start justify-between gap-4">
@@ -131,6 +150,7 @@ export default async function AdminOverviewPage({
                 </div>
                 <span className="inline-flex size-11 items-center justify-center rounded-xl bg-brand-cream text-brand-green-deep"><Clock3 className="size-5" strokeWidth={1.8} /></span>
               </div>
+              {summary.stats.pendingDeliveryFees > 0 ? <Link href="/admin/orders?fees=pending" className="mt-4 inline-flex text-sm font-semibold text-brand-green-deep underline decoration-brand-lime decoration-2 underline-offset-4">Review pending fees</Link> : null}
             </div>
           </div>
 
@@ -196,7 +216,7 @@ export default async function AdminOverviewPage({
                     <tbody className="divide-y divide-border/70">
                       {summary.recentOrders.map((order) => (
                         <tr key={order.id} className="hover:bg-brand-cream/20">
-                          <td className="px-6 py-4 font-mono text-xs font-semibold text-brand-green-deep">{order.reference}</td>
+                          <td className="px-6 py-4 font-mono text-xs font-semibold text-brand-green-deep">{order.order_number || order.reference}</td>
                           <td className="px-6 py-4 font-medium text-foreground">{order.customer_name}</td>
                           <td className="px-6 py-4 text-xs text-muted">{formatDateTime(order.created_at)}</td>
                           <td className="px-6 py-4 capitalize text-muted">{order.fulfilment_method}</td>
@@ -219,7 +239,7 @@ export default async function AdminOverviewPage({
                     <li key={order.id} className="p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="font-mono text-xs font-semibold text-brand-green-deep">{order.reference}</p>
+                          <p className="font-mono text-xs font-semibold text-brand-green-deep">{order.order_number || order.reference}</p>
                           <p className="mt-1 font-semibold text-foreground">{order.customer_name}</p>
                           <p className="mt-0.5 text-xs text-muted capitalize">{order.fulfilment_method} · {formatDateTime(order.created_at)}</p>
                         </div>

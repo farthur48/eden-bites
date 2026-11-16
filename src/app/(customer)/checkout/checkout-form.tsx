@@ -17,6 +17,19 @@ import { cn } from "@/lib/utils";
 import { placeOrderAction } from "./actions";
 
 const initialState: CheckoutState = { status: "idle" };
+const DRAFT_KEY = "eden-bites-checkout-draft:v1";
+
+type Draft = { fulfilment?: FulfilmentMethod; values?: Record<string, string> };
+
+function readDraft(): Draft {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as Draft) : {};
+  } catch {
+    return {};
+  }
+}
 
 export function CheckoutForm({
   store,
@@ -27,12 +40,26 @@ export function CheckoutForm({
 }) {
   const cart = useCart();
   const router = useRouter();
-  const [fulfilment, setFulfilment] = useState<FulfilmentMethod>("delivery");
+  const [draft] = useState(readDraft);
+  const [fulfilment, setFulfilment] = useState<FulfilmentMethod>(
+    draft.fulfilment === "pickup" || draft.fulfilment === "delivery" ? draft.fulfilment : "delivery",
+  );
   const [idempotencyKey] = useState(() => createIdempotencyKey());
   const [state, formAction, isPending] = useActionState(placeOrderAction, initialState);
 
   useEffect(() => {
+    const values = draft.values ?? {};
+    for (const [name, value] of Object.entries(values)) {
+      try {
+        const el = document.querySelector(`[name="${CSS.escape(name)}"]`) as HTMLInputElement | HTMLTextAreaElement | null;
+        if (el && !el.value) el.value = value;
+      } catch {}
+    }
+  }, [draft.values]);
+
+  useEffect(() => {
     if (state.status !== "success") return;
+    try { sessionStorage.removeItem(DRAFT_KEY); } catch {}
     clearCart();
     router.replace(`/order/${encodeURIComponent(state.confirmation.reference)}`);
   }, [router, state]);
@@ -43,7 +70,7 @@ export function CheckoutForm({
         <h2 className="font-display text-2xl font-bold text-brand-green-deep">
           Taking you to your confirmation...
         </h2>
-        <p className="mt-2 text-sm text-muted">Reference {state.confirmation.reference}</p>
+        <p className="mt-2 text-sm text-muted">Order {state.confirmation.orderNumber || state.confirmation.reference}</p>
       </div>
     );
   }
@@ -84,9 +111,34 @@ export function CheckoutForm({
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.75fr)] lg:items-start">
-      <form action={formAction} className="space-y-5">
+      <form
+        action={formAction}
+        className="space-y-5"
+        onChange={(e) => {
+          const form = e.currentTarget;
+          try {
+            const fd = new FormData(form);
+            const values: Record<string, string> = {};
+            for (const key of ["name", "phone", "email", "address", "area", "directions", "notes"]) {
+              const v = fd.get(key);
+              if (typeof v === "string" && v) values[key] = v;
+            }
+            sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ fulfilment, values }));
+          } catch {}
+        }}
+      >
         <input type="hidden" name="cart" value={cartPayload} readOnly />
         <input type="hidden" name="idempotencyKey" value={idempotencyKey} readOnly />
+
+        <div className="rounded-[1.25rem] border border-border/80 bg-white p-4 sm:p-5">
+          <p className="text-[0.65rem] font-bold uppercase tracking-[0.16em] text-brand-green/50">Checkout steps</p>
+          <ol className="mt-3 grid grid-cols-3 gap-2 text-xs font-semibold">
+            <li className="rounded-xl bg-brand-green-deep px-3 py-2 text-center text-white">1. Details</li>
+            <li className={`rounded-xl px-3 py-2 text-center ${fulfilment === "delivery" ? "bg-brand-lime/40 text-brand-green-deep" : "bg-brand-cream text-brand-green-deep"}`}>2. {fulfilment === "delivery" ? "Delivery" : "Pickup"}</li>
+            <li className="rounded-xl bg-brand-cream px-3 py-2 text-center text-brand-green-deep">3. Payment</li>
+          </ol>
+          <p className="mt-2 text-[0.7rem] text-muted">No online payment. We’ll confirm and you pay on {fulfilment}.</p>
+        </div>
 
         {!store.isOpen ? (
           <p role="alert" className="rounded-xl bg-amber-50 px-5 py-4 text-sm font-medium text-amber-900">
@@ -97,8 +149,11 @@ export function CheckoutForm({
         {state.status === "error" ? (
           <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-900">
             <p className="font-semibold">{state.message}</p>
-            {fieldErrors?.cart ? <p className="mt-1">{fieldErrors.cart}</p> : null}
-            {fieldErrors?.form ? <p className="mt-1">{fieldErrors.form}</p> : null}
+            {fieldErrors && Object.keys(fieldErrors).length > 0 ? (
+              <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs">
+                {Object.entries(fieldErrors).map(([k, v]) => (v ? <li key={k}>{v}</li> : null))}
+              </ul>
+            ) : null}
           </div>
         ) : null}
 
@@ -176,7 +231,7 @@ export function CheckoutForm({
 
         <fieldset className="rounded-[1.25rem] border border-border/80 bg-white p-5 sm:p-7">
           <legend className="font-display text-xl font-bold text-brand-green-deep">Payment Arrangement</legend>
-          <p className="mt-2 text-sm text-muted">No online payment now. Choose how you will pay on {fulfilment}.</p>
+            <p className="mt-2 text-sm text-muted">No online payment now. Choose how you will pay on {fulfilment}. We may confirm details by SMS/call.</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {paymentOptions.map((option, index) => (
               <label key={option.value} className="flex cursor-pointer items-center gap-3 rounded-xl border border-border p-4 hover:border-brand-green/30">

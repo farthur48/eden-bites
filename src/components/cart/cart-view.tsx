@@ -43,6 +43,7 @@ export function CartView({ store }: { store: StoreAvailability }) {
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1.45fr)_minmax(20rem,0.75fr)] lg:items-start">
       <div className="space-y-4">
+        <p className="text-xs font-medium text-muted">Review items, adjust quantities, then continue to checkout. Payment is on delivery or pickup.</p>
         {cart.items.map((item) => (
           <article
             key={item.key}
@@ -135,22 +136,22 @@ export function CartView({ store }: { store: StoreAvailability }) {
             </div>
             <div className="flex items-start justify-between gap-4">
               <dt className="text-muted">Delivery fee</dt>
-              <dd className="max-w-[11rem] text-right text-xs font-medium text-brand-green/70">
-                Confirmed after your location is reviewed
+              <dd className="max-w-[12rem] text-right text-xs font-medium text-brand-green/70">
+                Calculated after location review (delivery only). We&apos;ll confirm by call/SMS before dispatch.
               </dd>
             </div>
             <div className="flex items-center justify-between gap-4 border-t border-border pt-4">
-              <dt className="font-bold text-brand-green-deep">Total</dt>
+              <dt className="font-bold text-brand-green-deep">Estimated total</dt>
               <dd className="font-display text-2xl font-extrabold text-brand-green-deep">
                 {formatGhs(subtotal)}
               </dd>
             </div>
           </dl>
 
-          <p className="mt-4 text-xs leading-5 text-muted">
-            If you choose delivery, the final amount will include the confirmed
-            delivery fee. Payment is made on delivery or pickup.
-          </p>
+          <div className="mt-4 space-y-1.5 rounded-xl bg-brand-cream/60 px-4 py-3 text-xs leading-5 text-brand-green/80">
+            <p><span className="font-semibold text-brand-green-deep">How it works:</span> add details → we confirm → pay on arrival.</p>
+            <p>Pickup has no delivery fee. Delivery fee (if any) is confirmed first.</p>
+          </div>
 
           {!store.isOpen ? (
             <p className="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900">

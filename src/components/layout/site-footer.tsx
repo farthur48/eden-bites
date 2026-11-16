@@ -106,7 +106,7 @@ export async function SiteFooter() {
           </ul>
         </div>
 
-        <div>
+        <div id="contact" className="scroll-mt-28">
           <h2 className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-brand-lime">
             Contact
           </h2>

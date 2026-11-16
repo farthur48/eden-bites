@@ -261,8 +261,13 @@ function getMailer() {
   const config = getEmailServerConfig();
   if (!config) return null;
   mailer = nodemailer.createTransport({
-    service: "gmail",
-    auth: { user: config.user, pass: config.appPassword },
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    auth: { user: config.user, pass: config.pass },
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
   });
   return mailer;
 }
@@ -353,9 +358,11 @@ function buildPayload(confirmation: OrderConfirmation, event: OrderEvent) {
     event === "order_placed" ? "Order placed" :
     event === "order_out_for_delivery" ? "Order out for delivery" : "Order delivered";
   const statusText = formatOrderStatus(confirmation.status);
+  const orderRef = confirmation.orderNumber || confirmation.reference;
   const base = [
     `Eden Bites: ${title}`,
-    `Reference: ${confirmation.reference}`,
+    `Order: ${orderRef}`,
+    confirmation.orderNumber ? `Reference: ${confirmation.reference}` : null,
     `Status: ${statusText}`,
     `Time: ${formatDateTime(confirmation.createdAt)}`,
     `Customer: ${confirmation.customerName}`,
@@ -380,6 +387,7 @@ function buildPayload(confirmation: OrderConfirmation, event: OrderEvent) {
     event,
     title,
     reference: confirmation.reference,
+    orderNumber: confirmation.orderNumber,
     status: confirmation.status,
     customer: { name: confirmation.customerName, phone: confirmation.phone, email: confirmation.email },
     message: businessMessage,
@@ -387,21 +395,22 @@ function buildPayload(confirmation: OrderConfirmation, event: OrderEvent) {
     sms_customer: customerMessage,
     email_business: businessMessage,
     email_customer: customerMessage,
-    subject_business: `${title} - ${confirmation.reference}`,
-    subject_customer: `${title} - ${confirmation.reference}`,
+    subject_business: `${title} - ${orderRef}`,
+    subject_customer: `${title} - ${orderRef}`,
   };
 }
 
 function buildCustomerMessage(confirmation: OrderConfirmation, event: OrderEvent): string {
   const first = confirmation.customerName.split(" ")[0] || "there";
+  const orderRef = confirmation.orderNumber || confirmation.reference;
   if (event === "order_placed") {
     const feeNote = confirmation.deliveryFeeStatus === "pending" ? " Delivery fee/final amount will be confirmed shortly." : "";
-    return `Hi ${first}, your Eden Bites order ${confirmation.reference} has been placed (${formatOrderStatus(confirmation.status)}). Total: ${formatGhs(confirmation.totalPesewas)}.${feeNote}`;
+    return `Hi ${first}, your Eden Bites order ${orderRef} has been placed (${formatOrderStatus(confirmation.status)}). Total: ${formatGhs(confirmation.totalPesewas)}.${feeNote}`;
   }
   if (event === "order_out_for_delivery") {
-    return `Hi ${first}, your Eden Bites order ${confirmation.reference} is out for delivery. We will reach you on ${confirmation.phone}.`;
+    return `Hi ${first}, your Eden Bites order ${orderRef} is out for delivery. We will reach you on ${confirmation.phone}.`;
   }
-  return `Hi ${first}, your Eden Bites order ${confirmation.reference} has been delivered/completed. Thank you for ordering from Eden Bites.`;
+  return `Hi ${first}, your Eden Bites order ${orderRef} has been delivered/completed. Thank you for ordering from Eden Bites.`;
 }
 
 function buildSmsMessageFromPayload(payload: Json, channel: Channel): string {
