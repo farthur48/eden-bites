@@ -1,13 +1,31 @@
-"use client";
+﻿"use client";
 
 import { useActionState, useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bike, Store } from "lucide-react";
+import {
+  Bike,
+  Check,
+  ChevronLeft,
+  CreditCard,
+  Crosshair,
+  Info,
+  Lock,
+  Mail,
+  MapPin,
+  Phone,
+  ShieldCheck,
+  ShoppingBag,
+  User,
+} from "lucide-react";
 
-import { buttonStyles } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { getCartItemCount, getCartSubtotal } from "@/lib/cart/cart";
+import {
+  getCartLineTotal,
+  getCartSubtotal,
+  type CartItem,
+} from "@/lib/cart/cart";
 import { clearCart, useCart } from "@/lib/cart/store";
 import { formatGhs } from "@/lib/format";
 import type { CheckoutState, FulfilmentMethod } from "@/lib/orders/types";
@@ -18,6 +36,7 @@ import { placeOrderAction } from "./actions";
 
 const initialState: CheckoutState = { status: "idle" };
 const DRAFT_KEY = "eden-bites-checkout-draft:v1";
+const DELIVERY_FEE = 1500;
 
 type Draft = { fulfilment?: FulfilmentMethod; values?: Record<string, string> };
 
@@ -29,6 +48,18 @@ function readDraft(): Draft {
   } catch {
     return {};
   }
+}
+
+function getSizeLabel(item: CartItem): string {
+  const size = item.options.find((o) => /size/i.test(o.groupName) || /regular|large|extra/i.test(o.optionName));
+  if (!size) return "Regular";
+  return size.optionName.replace(/\s*size\s*/i, "").trim() || size.optionName;
+}
+
+function getExtrasLabel(item: CartItem): string | null {
+  const extras = item.options.filter((o) => !(/size/i.test(o.groupName) || /regular|large|extra/i.test(o.optionName)));
+  if (extras.length === 0) return null;
+  return extras.map((o) => o.optionName).join(", ");
 }
 
 export function CheckoutForm({
@@ -61,21 +92,21 @@ export function CheckoutForm({
     if (state.status !== "success") return;
     try { sessionStorage.removeItem(DRAFT_KEY); } catch {}
     clearCart();
-    router.replace(`/order/${encodeURIComponent(state.confirmation.reference)}`);
+    router.replace("/order-confirmation");
   }, [router, state]);
 
   if (state.status === "success") {
     return (
-      <div className="rounded-[1.25rem] border border-border bg-white p-8 text-center">
-        <h2 className="font-display text-2xl font-bold text-brand-green-deep">
-          Taking you to your confirmation...
-        </h2>
-        <p className="mt-2 text-sm text-muted">Order {state.confirmation.orderNumber || state.confirmation.reference}</p>
+      <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center">
+        <h2 className="text-xl font-bold text-gray-900">Taking you to your confirmation...</h2>
+        <p className="mt-2 text-sm text-gray-600">Order {state.confirmation.orderNumber || state.confirmation.reference}</p>
       </div>
     );
   }
 
-  if (!cart.ready) return <CheckoutSkeleton />;
+  if (!cart.ready) {
+    return <div className="min-h-[40vh]" aria-busy="true" />;
+  }
 
   if (cart.items.length === 0) {
     return (
@@ -83,13 +114,14 @@ export function CheckoutForm({
         eyebrow="Checkout"
         title="Your cart is empty"
         description="Add a meal from the menu before checking out."
-        action={<Link href="/menu" className={buttonStyles({ variant: "accent" })}>Browse the menu</Link>}
+        action={<Link href="/menu" className="inline-flex rounded-2xl bg-[#14532D] px-5 py-3 text-sm font-bold text-white">Browse the menu</Link>}
       />
     );
   }
 
   const subtotal = getCartSubtotal(cart.items);
-  const itemCount = getCartItemCount(cart.items);
+  const deliveryFee = fulfilment === "delivery" ? DELIVERY_FEE : 0;
+  const total = subtotal + deliveryFee;
   const fieldErrors = state.status === "error" ? state.fieldErrors : undefined;
   const cartPayload = JSON.stringify(
     cart.items.map((item) => ({
@@ -98,22 +130,49 @@ export function CheckoutForm({
       quantity: item.quantity,
     })),
   );
-  const paymentOptions =
-    fulfilment === "delivery"
-      ? [
-          { value: "cash_on_delivery", label: "Cash on delivery" },
-          { value: "momo_on_delivery", label: "MoMo on delivery" },
-        ]
-      : [
-          { value: "cash_on_pickup", label: "Cash on pickup" },
-          { value: "momo_on_pickup", label: "MoMo on pickup" },
-        ];
+  const paymentValue = fulfilment === "delivery" ? "cash_on_delivery" : "cash_on_pickup";
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.75fr)] lg:items-start">
+    <div className="pb-4">
+      <div className="mb-2 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          aria-label="Back"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-[#F4F6EE] text-gray-900"
+        >
+          <ChevronLeft className="size-5" />
+        </button>
+        <div>
+          <h1 className="text-2xl font-extrabold text-gray-900">Checkout</h1>
+          <p className="text-xs text-gray-600">Complete your order securely</p>
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-2xl bg-[#F9FBEF] p-4">
+        <div className="flex items-center">
+          <div className="flex flex-1 flex-col items-center">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#14532D] text-white">
+              <Check className="size-4" strokeWidth={3} />
+            </span>
+            <span className="mt-1 text-xs font-semibold text-[#14532D]">Cart</span>
+          </div>
+          <div className="mb-5 h-0.5 flex-1 bg-[#14532D]" />
+          <div className="flex flex-1 flex-col items-center">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#14532D] text-sm font-bold text-white">2</span>
+            <span className="mt-1 text-xs font-bold text-[#14532D]">Checkout</span>
+          </div>
+          <div className="mb-5 h-0.5 flex-1 bg-gray-300" />
+          <div className="flex flex-1 flex-col items-center">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-200 text-sm font-bold text-gray-500">3</span>
+            <span className="mt-1 text-xs font-semibold text-gray-500">Confirmation</span>
+          </div>
+        </div>
+      </div>
+
       <form
         action={formAction}
-        className="space-y-5"
+        className="space-y-1"
         onChange={(e) => {
           const form = e.currentTarget;
           try {
@@ -129,242 +188,175 @@ export function CheckoutForm({
       >
         <input type="hidden" name="cart" value={cartPayload} readOnly />
         <input type="hidden" name="idempotencyKey" value={idempotencyKey} readOnly />
-
-        <div className="rounded-[1.25rem] border border-border/80 bg-white p-4 sm:p-5">
-          <p className="text-[0.65rem] font-bold uppercase tracking-[0.16em] text-brand-green/50">Checkout steps</p>
-          <ol className="mt-3 grid grid-cols-3 gap-2 text-xs font-semibold">
-            <li className="rounded-xl bg-brand-green-deep px-3 py-2 text-center text-white">1. Details</li>
-            <li className={`rounded-xl px-3 py-2 text-center ${fulfilment === "delivery" ? "bg-brand-lime/40 text-brand-green-deep" : "bg-brand-cream text-brand-green-deep"}`}>2. {fulfilment === "delivery" ? "Delivery" : "Pickup"}</li>
-            <li className="rounded-xl bg-brand-cream px-3 py-2 text-center text-brand-green-deep">3. Payment</li>
-          </ol>
-          <p className="mt-2 text-[0.7rem] text-muted">No online payment. We’ll confirm and you pay on {fulfilment}.</p>
-        </div>
+        <input type="hidden" name="paymentMethod" value={paymentValue} readOnly />
 
         {!store.isOpen ? (
-          <p role="alert" className="rounded-xl bg-amber-50 px-5 py-4 text-sm font-medium text-amber-900">
+          <p role="alert" className="mb-3 rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
             {store.message || "Orders are currently paused."}
           </p>
         ) : null}
 
         {state.status === "error" ? (
-          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-900">
+          <div role="alert" className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
             <p className="font-semibold">{state.message}</p>
             {fieldErrors && Object.keys(fieldErrors).length > 0 ? (
-              <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs">
+              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs">
                 {Object.entries(fieldErrors).map(([k, v]) => (v ? <li key={k}>{v}</li> : null))}
               </ul>
             ) : null}
           </div>
         ) : null}
 
-        <section className="rounded-[1.25rem] border border-border/80 bg-white p-5 sm:p-7">
-          <h2 className="font-display text-xl font-bold text-brand-green-deep">Customer Information</h2>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <Field label="Full name" name="name" autoComplete="name" placeholder="Ama Mensah" error={fieldErrors?.name} required />
-            <Field label="Phone number" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="024 000 0000" error={fieldErrors?.phone} required />
-            <Field label="Email address (optional)" name="email" type="email" inputMode="email" autoComplete="email" placeholder="you@example.com" error={fieldErrors?.email} className="sm:col-span-2" />
+        <section>
+          <h2 className="mb-3 mt-4 flex items-center gap-2 text-base font-bold text-gray-900">
+            <User className="size-4 text-[#14532D]" aria-hidden="true" /> Contact Information
+          </h2>
+          <div className="space-y-3">
+            <label className="block">
+              <span className="sr-only">Full name</span>
+              <div className={cn("flex items-center gap-3 rounded-2xl border bg-white px-4 py-3.5 text-sm", fieldErrors?.name ? "border-red-400" : "border-gray-200")}>
+                <User className="size-4 shrink-0 text-gray-500" aria-hidden="true" />
+                <input name="name" autoComplete="name" placeholder="Full name" required className="w-full bg-transparent text-gray-900 outline-none placeholder:text-gray-500" />
+              </div>
+              {fieldErrors?.name ? <span className="mt-1 block text-xs text-red-700">{fieldErrors.name}</span> : null}
+            </label>
+            <label className="block">
+              <span className="sr-only">Email address</span>
+              <div className={cn("flex items-center gap-3 rounded-2xl border bg-white px-4 py-3.5 text-sm", fieldErrors?.email ? "border-red-400" : "border-gray-200")}>
+                <Mail className="size-4 shrink-0 text-gray-500" aria-hidden="true" />
+                <input type="email" name="email" autoComplete="email" placeholder="Email address" className="w-full bg-transparent text-gray-900 outline-none placeholder:text-gray-500" />
+              </div>
+              {fieldErrors?.email ? <span className="mt-1 block text-xs text-red-700">{fieldErrors.email}</span> : null}
+            </label>
+            <label className="block">
+              <span className="sr-only">Phone number</span>
+              <div className={cn("flex items-center gap-3 rounded-2xl border bg-white px-4 py-3.5 text-sm", fieldErrors?.phone ? "border-red-400" : "border-gray-200")}>
+                <Phone className="size-4 shrink-0 text-gray-500" aria-hidden="true" />
+                <input type="tel" name="phone" inputMode="tel" autoComplete="tel" placeholder="Phone number" required className="w-full bg-transparent text-gray-900 outline-none placeholder:text-gray-500" />
+              </div>
+              {fieldErrors?.phone ? <span className="mt-1 block text-xs text-red-700">{fieldErrors.phone}</span> : null}
+            </label>
           </div>
         </section>
 
-        <fieldset className="rounded-[1.25rem] border border-border/80 bg-white p-5 sm:p-7">
-          <legend className="font-display text-xl font-bold text-brand-green-deep">Fulfilment Method</legend>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {([
-              { value: "delivery", title: "Delivery", description: "Have your meal delivered to you", icon: Bike },
-              { value: "pickup", title: "Pickup", description: "Collect your order from the kitchen", icon: Store },
-            ] as const).map((option) => {
-              const checked = fulfilment === option.value;
-              const Icon = option.icon;
-              return (
-                <label
-                  key={option.value}
-                  className={cn(
-                    "flex cursor-pointer gap-3 rounded-xl border p-4 transition-all",
-                    checked ? "border-brand-green bg-brand-lime/10 ring-1 ring-brand-green/20" : "border-border bg-white hover:border-brand-green/30",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="fulfilment"
-                    value={option.value}
-                    checked={checked}
-                    onChange={() => setFulfilment(option.value)}
-                    className="mt-1 size-4 shrink-0 accent-[#174b20]"
-                  />
-                  <span className="flex gap-3">
-                    <span className={cn("mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl", checked ? "bg-brand-green text-brand-lime" : "bg-brand-cream text-brand-green/70")}>
-                      <Icon className="size-5" strokeWidth={1.8} />
-                    </span>
-                    <span>
-                      <span className="block text-sm font-bold text-brand-green-deep">{option.title}</span>
-                      <span className="mt-0.5 block text-xs leading-relaxed text-muted">{option.description}</span>
-                    </span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
+        <fieldset className="mt-4 grid grid-cols-2 gap-3">
+          <legend className="sr-only">Fulfillment method</legend>
+          <label className={cn("flex cursor-pointer items-center justify-between rounded-2xl p-3", fulfilment === "delivery" ? "border-2 border-[#14532D] bg-[#F4F6EE]" : "border border-gray-200 bg-white")}>
+            <input type="radio" name="fulfilment" value="delivery" checked={fulfilment === "delivery"} onChange={() => setFulfilment("delivery")} className="sr-only" />
+            <span className="flex items-center gap-2.5">
+              <Bike className="size-5 text-[#14532D]" aria-hidden="true" />
+              <span>
+                <span className="block text-sm font-bold text-gray-900">Delivery</span>
+                <span className="block text-[11px] text-gray-600">To your location</span>
+              </span>
+            </span>
+            <span className={cn("flex h-5 w-5 items-center justify-center rounded-full border-2", fulfilment === "delivery" ? "border-[#14532D]" : "border-gray-300")}>
+              {fulfilment === "delivery" ? <span className="h-2.5 w-2.5 rounded-full bg-[#14532D]" /> : null}
+            </span>
+          </label>
+          <label className={cn("flex cursor-pointer items-center justify-between rounded-2xl p-3", fulfilment === "pickup" ? "border-2 border-[#14532D] bg-[#F4F6EE]" : "border border-gray-200 bg-white")}>
+            <input type="radio" name="fulfilment" value="pickup" checked={fulfilment === "pickup"} onChange={() => setFulfilment("pickup")} className="sr-only" />
+            <span className="flex items-center gap-2.5">
+              <ShoppingBag className="size-5 text-[#14532D]" aria-hidden="true" />
+              <span>
+                <span className="block text-sm font-bold text-gray-900">Pickup</span>
+                <span className="block text-[11px] text-gray-600">Collect order</span>
+              </span>
+            </span>
+            <span className={cn("flex h-5 w-5 items-center justify-center rounded-full border-2", fulfilment === "pickup" ? "border-[#14532D]" : "border-gray-300")}>
+              {fulfilment === "pickup" ? <span className="h-2.5 w-2.5 rounded-full bg-[#14532D]" /> : null}
+            </span>
+          </label>
         </fieldset>
 
         {fulfilment === "delivery" ? (
-          <section className="rounded-[1.25rem] border border-border/80 bg-white p-5 sm:p-7">
-            <h2 className="font-display text-xl font-bold text-brand-green-deep">Delivery Details</h2>
-            <div className="mt-5 grid gap-4">
-              <Field label="Delivery address" name="address" autoComplete="street-address" placeholder="House number, street, landmark" error={fieldErrors?.address} required />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Area / neighbourhood" name="area" placeholder="East Legon, Madina..." error={fieldErrors?.area} required />
-                <Field label="Additional directions (optional)" name="directions" placeholder="Gate colour, landmark..." />
+          <section>
+            <h2 className="mb-2 mt-4 flex items-center gap-2 text-base font-bold text-gray-900">
+              <MapPin className="size-4 text-[#14532D]" aria-hidden="true" /> Delivery Address
+            </h2>
+            <label className="block">
+              <span className="sr-only">Delivery address</span>
+              <div className={cn("flex items-center justify-between rounded-2xl border bg-white px-4 py-3.5 text-sm", fieldErrors?.address ? "border-red-400" : "border-gray-200")}>
+                <input name="address" autoComplete="street-address" placeholder="Enter your delivery address..." required={fulfilment === "delivery"} className="w-full bg-transparent text-gray-900 outline-none placeholder:text-gray-500" />
+                <button type="button" aria-label="Use current location" className="ml-2 text-[#14532D]">
+                  <Crosshair className="size-5" />
+                </button>
               </div>
-              <p className="rounded-xl bg-brand-cream px-4 py-3 text-xs leading-relaxed text-brand-green/75">
-                Delivery fee will be confirmed after reviewing your location and included in the final amount.
-              </p>
-            </div>
+              {fieldErrors?.address ? <span className="mt-1 block text-xs text-red-700">{fieldErrors.address}</span> : null}
+            </label>
+            <label className="mt-2 block">
+              <span className="sr-only">Area / neighbourhood</span>
+              <div className={cn("flex items-center gap-3 rounded-2xl border bg-white px-4 py-3.5 text-sm", fieldErrors?.area ? "border-red-400" : "border-gray-200")}>
+                <input name="area" placeholder="Area / neighbourhood" required={fulfilment === "delivery"} className="w-full bg-transparent text-gray-900 outline-none placeholder:text-gray-500" />
+              </div>
+              {fieldErrors?.area ? <span className="mt-1 block text-xs text-red-700">{fieldErrors.area}</span> : null}
+            </label>
           </section>
         ) : (
-          <section className="rounded-[1.25rem] border border-border/80 bg-white p-5 sm:p-7">
-            <h2 className="font-display text-xl font-bold text-brand-green-deep">Pickup Information</h2>
-            <div className="mt-4 rounded-xl bg-brand-lime/10 px-4 py-4 text-sm leading-relaxed text-brand-green-deep">
-              {pickupInstructions || "Pickup details will be confirmed after you place your order. We will contact you with the location and time."}
-            </div>
+          <section className="mt-4 rounded-2xl border border-gray-200 bg-[#F9FBEF] p-4 text-sm text-gray-800">
+            <h2 className="mb-1 font-bold text-gray-900">Pickup Information</h2>
+            <p>{pickupInstructions || "Pickup details will be confirmed after you place your order."}</p>
           </section>
         )}
 
-        <fieldset className="rounded-[1.25rem] border border-border/80 bg-white p-5 sm:p-7">
-          <legend className="font-display text-xl font-bold text-brand-green-deep">Payment Arrangement</legend>
-            <p className="mt-2 text-sm text-muted">No online payment now. Choose how you will pay on {fulfilment}. We may confirm details by SMS/call.</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {paymentOptions.map((option, index) => (
-              <label key={option.value} className="flex cursor-pointer items-center gap-3 rounded-xl border border-border p-4 hover:border-brand-green/30">
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value={option.value}
-                  defaultChecked={index === 0}
-                  className="size-4 accent-[#174b20]"
-                />
-                <span className="text-sm font-medium text-brand-green-deep">{option.label}</span>
-              </label>
-            ))}
+        <div className="mb-2 mt-4 flex items-center justify-between">
+          <h2 className="text-base font-bold text-gray-900">Order Summary</h2>
+          <Link href="/cart" className="text-sm font-semibold text-[#14532D]">Edit Cart →</Link>
+        </div>
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+          <div className="space-y-3">
+            {cart.items.map((item) => {
+              const size = getSizeLabel(item);
+              const extras = getExtrasLabel(item);
+              return (
+                <div key={item.key} className="flex gap-3">
+                  <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-brand-sand">
+                    <Image src={item.imageUrl} alt={item.imageAlt} fill sizes="4rem" className="object-cover" />
+                  </div>
+                  <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-gray-900">{item.productName}</p>
+                      <p className="mt-0.5 text-xs text-gray-600">{size}{extras ? `, ${extras}` : ""}</p>
+                      <p className="mt-0.5 text-xs font-semibold text-gray-500">x{item.quantity}</p>
+                    </div>
+                    <p className="shrink-0 text-sm font-bold text-gray-900">{formatGhs(getCartLineTotal(item))}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          {fieldErrors?.payment ? <p className="mt-2 text-xs text-red-700">{fieldErrors.payment}</p> : null}
-        </fieldset>
+          <div className="mt-3 space-y-2 border-t border-gray-100 pt-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-700">Subtotal</span>
+              <span className="font-semibold text-gray-900">{formatGhs(subtotal)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1 text-gray-700">Delivery Fee <Info className="size-3.5 text-gray-500" aria-hidden="true" /></span>
+              <span className="font-semibold text-gray-900">{fulfilment === "delivery" ? formatGhs(DELIVERY_FEE) : "—"}</span>
+            </div>
+          </div>
+          <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3 text-lg font-extrabold">
+            <span className="text-gray-900">Total</span>
+            <span className="text-[#15803D]">{formatGhs(total)}</span>
+          </div>
+        </div>
 
-        <section className="rounded-[1.25rem] border border-border/80 bg-white p-5 sm:p-7">
-          <h2 className="font-display text-xl font-bold text-brand-green-deep">Additional Instructions</h2>
-          <div className="mt-4">
-            <Field label="Order notes (optional)" name="notes" placeholder="Allergies, preferences, extra requests..." textarea />
+        <div className="mt-4 flex items-center justify-between rounded-2xl bg-[#F4F6EE] px-4 py-3 text-xs font-semibold text-[#14532D]">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />
+            <span><span className="font-bold">Secure &amp; Reliable</span> <span className="font-medium text-[#14532D]/80">/ Your information is safe with us.</span></span>
           </div>
-        </section>
+          <Lock className="size-4 shrink-0" aria-hidden="true" />
+        </div>
 
         <button
           type="submit"
           disabled={!store.isOpen || isPending}
-          className={buttonStyles({ variant: "accent", size: "lg", className: "w-full" })}
+          className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-2xl bg-[#14532D] py-4 text-base font-bold text-white shadow-md hover:bg-[#113E24] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isPending ? "Placing your order..." : "Place Order"}
+          <CreditCard className="size-5" aria-hidden="true" /> {isPending ? "Placing Order..." : "Place Order"}
         </button>
-        <p className="text-center text-xs text-muted">No online payment required. Pay on delivery or pickup.</p>
       </form>
-
-      <aside className="lg:sticky lg:top-28">
-        <div className="rounded-[1.25rem] border border-border/80 bg-white p-6 sm:p-7">
-          <h2 className="font-display text-xl font-bold text-brand-green-deep">Order summary</h2>
-          <ul className="mt-5 space-y-4">
-            {cart.items.map((item) => (
-              <li key={item.key} className="flex items-start justify-between gap-4 text-sm">
-                <div className="min-w-0">
-                  <p className="font-semibold text-brand-green-deep">
-                    {item.quantity} × {item.productName}
-                  </p>
-                  <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted">
-                    {item.options.length > 0 ? item.options.map((o) => o.optionName).join(", ") : "Standard preparation"}
-                  </p>
-                </div>
-                <p className="shrink-0 font-semibold text-brand-green-deep">{formatGhs(getCartSubtotal([item]))}</p>
-              </li>
-            ))}
-          </ul>
-          <dl className="mt-5 space-y-3 border-t border-border pt-4 text-sm">
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-muted">Items ({itemCount})</dt>
-              <dd className="font-semibold text-brand-green-deep">{formatGhs(subtotal)}</dd>
-            </div>
-            <div className="flex items-start justify-between gap-4">
-              <dt className="text-muted">Delivery fee</dt>
-              <dd className="max-w-[10rem] text-right text-xs font-medium text-brand-green/70">
-                {fulfilment === "delivery" ? "To be confirmed" : "Not applicable"}
-              </dd>
-            </div>
-            <div className="flex items-center justify-between gap-4 border-t border-border pt-3">
-              <dt className="font-bold text-brand-green-deep">
-                {fulfilment === "delivery" ? "Estimated total" : "Total"}
-              </dt>
-              <dd className="font-display text-xl font-extrabold text-brand-green-deep">{formatGhs(subtotal)}</dd>
-            </div>
-          </dl>
-          <Link href="/cart" className="mt-5 block text-center text-xs font-semibold text-brand-green/60 hover:text-brand-green-deep">
-            Edit cart
-          </Link>
-        </div>
-      </aside>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  name,
-  type = "text",
-  autoComplete,
-  inputMode,
-  placeholder,
-  error,
-  required = false,
-  className,
-  textarea = false,
-}: {
-  label: string;
-  name: string;
-  type?: string;
-  autoComplete?: string;
-  inputMode?: "tel" | "text" | "email";
-  placeholder?: string;
-  error?: string;
-  required?: boolean;
-  className?: string;
-  textarea?: boolean;
-}) {
-  const errorId = `${name}-error`;
-  const shared = cn(
-    "mt-2 w-full rounded-xl border bg-white px-4 text-sm text-foreground placeholder:text-muted/60 focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/10",
-    textarea ? "min-h-28 py-3" : "h-12",
-    error ? "border-red-400" : "border-border",
-  );
-
-  return (
-    <label className={cn("block", className)}>
-      <span className="text-sm font-medium text-brand-green-deep">
-        {label}
-        {required ? <span aria-hidden="true"> *</span> : null}
-      </span>
-      {textarea ? (
-        <textarea name={name} placeholder={placeholder} required={required} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} className={shared} />
-      ) : (
-        <input type={type} name={name} autoComplete={autoComplete} inputMode={inputMode} placeholder={placeholder} required={required} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} className={shared} />
-      )}
-      {error ? <span id={errorId} className="mt-1.5 block text-xs text-red-700">{error}</span> : null}
-    </label>
-  );
-}
-
-function CheckoutSkeleton() {
-  return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.75fr)]">
-      <div className="space-y-5">
-        <div className="h-56 animate-pulse rounded-[1.25rem] border border-border/80 bg-white" />
-        <div className="h-72 animate-pulse rounded-[1.25rem] border border-border/80 bg-white" />
-      </div>
-      <div className="h-80 animate-pulse rounded-[1.25rem] border border-border/80 bg-white" />
     </div>
   );
 }

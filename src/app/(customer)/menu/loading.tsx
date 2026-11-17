@@ -2,24 +2,30 @@ import { Container } from "@/components/layout/container";
 
 export default function MenuLoading() {
   return (
-    <div aria-busy="true" aria-live="polite">
-      <section className="border-b border-border/70 bg-brand-cream/40 py-14 sm:py-18 lg:py-20">
-        <Container className="flex flex-col items-center gap-4">
-          <div className="h-3 w-20 animate-pulse rounded-full bg-brand-green/10" />
-          <div className="h-10 w-72 max-w-full animate-pulse rounded-xl bg-brand-green/10" />
-          <div className="h-4 w-full max-w-md animate-pulse rounded-full bg-brand-green/10" />
-        </Container>
-      </section>
-      <section className="py-12 sm:py-16 lg:py-20">
+    <div aria-busy="true" aria-live="polite" className="bg-white">
+      <section className="pb-2 pt-3">
         <Container>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {[0, 1, 2, 3].map((item) => (
-              <div key={item} className="overflow-hidden rounded-[1.25rem] border border-border/70 bg-white">
-                <div className="aspect-[4/3] animate-pulse bg-brand-sand" />
-                <div className="space-y-3 p-5">
-                  <div className="h-5 w-2/3 animate-pulse rounded-full bg-brand-green/10" />
-                  <div className="h-4 w-full animate-pulse rounded-full bg-brand-green/10" />
-                  <div className="h-10 w-full animate-pulse rounded-xl bg-brand-green/10" />
+          <div className="h-11 w-full animate-pulse rounded-full bg-gray-100" />
+          <div className="mt-4 grid grid-cols-4 gap-2.5">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-[5.25rem] animate-pulse rounded-2xl border border-[#14532D]/10 bg-[#F4F6EE]" />
+            ))}
+          </div>
+          <div className="mt-4 flex gap-2.5 overflow-hidden">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-9 w-20 shrink-0 animate-pulse rounded-full bg-gray-100" />
+            ))}
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="overflow-hidden rounded-2xl border border-gray-100 bg-white p-2.5">
+                <div className="aspect-[4/3] animate-pulse rounded-xl bg-brand-sand" />
+                <div className="mt-2 space-y-2">
+                  <div className="h-4 w-3/4 animate-pulse rounded bg-gray-100" />
+                  <div className="flex items-center justify-between">
+                    <div className="h-4 w-16 animate-pulse rounded bg-gray-100" />
+                    <div className="h-8 w-8 animate-pulse rounded-xl bg-gray-100" />
+                  </div>
                 </div>
               </div>
             ))}

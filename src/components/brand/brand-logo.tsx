@@ -53,7 +53,7 @@ export function BrandLogo({
                 isLight ? "text-brand-lime" : "text-brand-green/55",
               )}
             >
-              Life in every bite
+              Life In Every Bite.
             </span>
           )}
         </span>

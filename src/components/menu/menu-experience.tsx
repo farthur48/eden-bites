@@ -1,44 +1,58 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 
 import { ProductCard } from "@/components/menu/product-card";
-import { ProductCustomizer } from "@/components/menu/product-customizer";
 import type { MenuProduct } from "@/lib/menu/types";
 import type { StoreAvailability } from "@/lib/store/availability";
 import { cn } from "@/lib/utils";
 
 type Filter = "all" | "available" | "featured";
 
+function matchesCategory(product: MenuProduct, category: string): boolean {
+  const c = category.trim().toLowerCase();
+  if (!c) return true;
+  const hay = [product.name, product.tagline, product.description, ...(product.tags ?? [])].join(" ").toLowerCase();
+  if (c === "rice") return hay.includes("rice") || hay.includes("jollof") || hay.includes("waakye") || hay.includes("fried rice");
+  if (c === "local" || c === "local meals" || c === "local-meals") return hay.includes("banku") || hay.includes("fufu") || hay.includes("waakye") || hay.includes("kenkey") || hay.includes("local") || hay.includes("tilapia") || hay.includes("acheke") || hay.includes("atti");
+  if (c === "chicken") return hay.includes("chicken");
+  if (c === "sides") return hay.includes("side") || hay.includes("plantain") || hay.includes("fries") || hay.includes("salad") || hay.includes("sauce") || hay.includes("extra");
+  return hay.includes(c);
+}
+
 export function MenuExperience({
   products,
   store,
   ctaLabel,
   showControls = true,
+  compactCards = false,
+  cardVariant = "default",
+  initialQuery = "",
+  initialCategory = "",
 }: {
   products: MenuProduct[];
   store: StoreAvailability;
   ctaLabel?: string;
   showControls?: boolean;
+  compactCards?: boolean;
+  cardVariant?: "default" | "grid";
+  initialQuery?: string;
+  initialCategory?: string;
+  linkToDetail?: boolean;
 }) {
-  const [selectedProduct, setSelectedProduct] = useState<MenuProduct | null>(null);
-  const [addedProductName, setAddedProductName] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const router = useRouter();
+  const [query, setQuery] = useState(initialQuery);
   const [filter, setFilter] = useState<Filter>("all");
-
-  useEffect(() => {
-    if (!addedProductName) return;
-    const timer = window.setTimeout(() => setAddedProductName(null), 3500);
-    return () => window.clearTimeout(timer);
-  }, [addedProductName]);
+  const [category, setCategory] = useState(initialCategory);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return products.filter((p) => {
       if (filter === "available" && !p.isAvailable) return false;
       if (filter === "featured" && !p.isFeatured) return false;
+      if (category && !matchesCategory(p, category)) return false;
       if (!q) return true;
       const hay = [p.name, p.description, p.tagline, ...(p.tags ?? []), p.allergenNote]
         .filter(Boolean)
@@ -46,12 +60,9 @@ export function MenuExperience({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [products, query, filter]);
+  }, [products, query, filter, category]);
 
-  function handleAdded(productName: string) {
-    setSelectedProduct(null);
-    setAddedProductName(productName);
-  }
+
 
   if (products.length === 0) return null;
 
@@ -92,52 +103,36 @@ export function MenuExperience({
         </div>
       ) : null}
 
+      {category && showControls ? (
+        <div className="mb-4 flex items-center gap-2">
+          <span className="rounded-full bg-brand-lime/25 px-3 py-1 text-xs font-semibold text-brand-green-deep capitalize">{category.replace(/-/g, " ")}</span>
+          <button type="button" onClick={() => setCategory("")} className="text-xs font-semibold text-brand-green-deep underline decoration-brand-green/20 underline-offset-4">Clear category</button>
+        </div>
+      ) : null}
+
       {filtered.length === 0 ? (
         <div className="rounded-[1.25rem] border border-dashed border-border bg-white p-10 text-center">
           <p className="font-display text-lg font-bold text-brand-green-deep">No meals match</p>
           <p className="mt-1 text-sm text-muted">Try a different search or filter.</p>
-          <button type="button" onClick={() => { setQuery(""); setFilter("all"); }} className="mt-4 text-sm font-semibold text-brand-green-deep underline decoration-brand-lime decoration-2 underline-offset-4">
+          <button type="button" onClick={() => { setQuery(""); setFilter("all"); setCategory(""); }} className="mt-4 text-sm font-semibold text-brand-green-deep underline decoration-brand-lime decoration-2 underline-offset-4">
             Clear filters
           </button>
         </div>
       ) : (
-        <div className="grid gap-6 sm:grid-cols-2">
+        <div className={cn("grid grid-cols-2", cardVariant === "grid" ? "gap-3" : "gap-3 sm:gap-6")}>
           {filtered.map((product, index) => (
             <ProductCard
               key={product.id}
               product={product}
               isStoreOpen={store.isOpen}
-              onSelect={setSelectedProduct}
               priority={index === 0 && !query && filter === "all"}
               ctaLabel={ctaLabel}
+              compact={compactCards}
+              variant={cardVariant}
             />
           ))}
         </div>
       )}
-
-      {selectedProduct ? (
-        <ProductCustomizer
-          key={selectedProduct.id}
-          product={selectedProduct}
-          isStoreOpen={store.isOpen}
-          onClose={() => setSelectedProduct(null)}
-          onAdded={handleAdded}
-        />
-      ) : null}
-
-      {addedProductName ? (
-        <div
-          role="status"
-          className="fixed bottom-5 left-1/2 z-[80] flex w-[min(calc(100%-2rem),28rem)] -translate-x-1/2 items-center gap-3 rounded-2xl border border-brand-green/10 bg-white p-3.5 pl-4 shadow-2xl shadow-brand-green/20"
-        >
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-brand-green-deep">{addedProductName} added</p>
-            <p className="text-xs text-muted">Ready in your cart</p>
-          </div>
-          <Link href="/checkout" className="shrink-0 rounded-xl bg-brand-lime px-3.5 py-2 text-xs font-bold text-brand-black">Checkout</Link>
-          <Link href="/cart" className="shrink-0 rounded-xl border border-border px-3.5 py-2 text-xs font-semibold text-brand-green-deep">Cart</Link>
-        </div>
-      ) : null}
     </>
   );
 }

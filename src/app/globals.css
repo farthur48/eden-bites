@@ -84,3 +84,8 @@
     box-shadow: 0 1px 0 rgba(20, 20, 20, 0.02);
   }
 }
+
+[data-nextjs-toast],
+nextjs-portal {
+  display: none !important;
+}
